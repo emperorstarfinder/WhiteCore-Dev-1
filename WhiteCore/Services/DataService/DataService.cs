@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) Contributors, http://whitecore-sim.org/, http://aurora-sim.org
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
@@ -25,23 +26,23 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+using System;
+using System.Collections.Generic;
+using Nini.Config;
 using WhiteCore.DataManager.MySQL;
+using WhiteCore.DataManager.PgSQL;
 using WhiteCore.DataManager.SQLite;
-
 using WhiteCore.Framework.ConsoleFramework;
 using WhiteCore.Framework.ModuleLoader;
 using WhiteCore.Framework.Modules;
 using WhiteCore.Framework.Services;
-using Nini.Config;
-using System;
-using System.Collections.Generic;
 
 namespace WhiteCore.Services.DataService
 {
     public class LocalDataService
     {
-        private string ConnectionString = "";
-        private string StorageProvider = "";
+        string ConnectionString = "";
+        string StorageProvider = "";
 
         public void Initialise(IConfigSource source, IRegistryCore simBase)
         {
@@ -72,6 +73,14 @@ namespace WhiteCore.Services.DataService
 
                 DataConnector = GenericData;
             }*/
+
+            else if (StorageProvider == "PgSQL")
+                //Allow for fallback when WhiteCoreData isn't set
+            {
+                PgSQLDataLoader GenericData = new PgSQLDataLoader();
+
+                DataConnector = GenericData;
+            }
             else if (StorageProvider == "SQLite")
                 //Allow for fallback when WhiteCoreData isn't set
             {
@@ -92,7 +101,7 @@ namespace WhiteCore.Services.DataService
                 {
                     if (MainConsole.Instance != null)
                         MainConsole.Instance.Warn("[DataService]: Exception occurred starting data plugin " +
-                                                  plugin.Name + ", " + ex.ToString());
+                                                  plugin.Name + ", " + ex);
                 }
             }
         }
@@ -126,6 +135,13 @@ namespace WhiteCore.Services.DataService
 
                 DataConnector = GenericData;
             }*/
+            else if (StorageProvider == "PgSQL")
+                //Allow for fallback when WhiteCoreData isn't set
+            {
+                PgSQLDataLoader GenericData = new PgSQLDataLoader();
+
+                DataConnector = GenericData;
+            }
             else if (StorageProvider == "SQLite")
                 //Allow for fallback when WhiteCoreData isn't set
             {
@@ -147,7 +163,7 @@ namespace WhiteCore.Services.DataService
                     {
                         if (MainConsole.Instance != null)
                             MainConsole.Instance.Warn("[DataService]: Exception occurred starting data plugin " +
-                                                      plugin.Name + ", " + ex.ToString());
+                                                      plugin.Name + ", " + ex);
                     }
                 }
             }

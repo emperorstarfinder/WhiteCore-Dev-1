@@ -25,21 +25,21 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using WhiteCore.DataManager.Migration;
-using WhiteCore.Framework.ConsoleFramework;
-using WhiteCore.Framework.Services;
-using WhiteCore.Framework.Utilities;
-using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using MySql.Data.MySqlClient;
+using WhiteCore.DataManager.Migration;
+using WhiteCore.Framework.ConsoleFramework;
+using WhiteCore.Framework.Services;
+using WhiteCore.Framework.Utilities;
 
 namespace WhiteCore.DataManager.MySQL
 {
     public class MySQLDataLoader : DataManagerBase
     {
-        private string m_connectionString = "";
+        string m_connectionString = "";
 
         public override string Identifier
         {
@@ -160,7 +160,7 @@ namespace WhiteCore.DataManager.MySQL
             return QueryFullData2(query);
         }
 
-        private List<string> QueryFullData2(string query)
+        List<string> QueryFullData2(string query)
         {
             IDataReader reader = null;
             List<string> retVal = new List<string>();
@@ -197,7 +197,7 @@ namespace WhiteCore.DataManager.MySQL
             return new DataReaderConnection {DataReader = QueryData2(query)};
         }
 
-        private IDataReader QueryData2(string query)
+        IDataReader QueryData2(string query)
         {
             return Query(query, new Dictionary<string, object>());
         }

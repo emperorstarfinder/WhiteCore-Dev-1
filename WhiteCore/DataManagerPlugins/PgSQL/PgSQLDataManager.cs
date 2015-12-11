@@ -25,17 +25,16 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using WhiteCore.DataManager.Migration;
-using WhiteCore.Framework.ConsoleFramework;
-using WhiteCore.Framework.Services;
-using WhiteCore.Framework.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using Npgsql;
-using NpgsqlTypes;
 using System.Reflection;
+using Npgsql;
+using WhiteCore.DataManager.Migration;
+using WhiteCore.Framework.ConsoleFramework;
+using WhiteCore.Framework.Services;
+using WhiteCore.Framework.Utilities;
 
 namespace WhiteCore.DataManager.PgSQL
 {
@@ -50,78 +49,80 @@ namespace WhiteCore.DataManager.PgSQL
 
         #region Database
 
-        public override void ConnectToDatabase(string connectionstring, string migratorName, bool validateTables)
+        public override void ConnectToDatabase (string connectionString, string migratorName, bool validateTables)
         {
-            m_connectionString = connectionstring;
-            NpgsqlConnection c = new NpgsqlConnection(connectionstring);
-            int subStrA = connectionstring.IndexOf("Database=");
-            int subStrB = connectionstring.IndexOf(";", subStrA);
-            string noDatabaseConnector = m_connectionString.Substring(0, subStrA) +
-                                         m_connectionString.Substring(subStrB + 1);
+            m_connectionString = connectionString;
+            var c = new NpgsqlConnection (connectionString);
+            InitializeMonoSecurity();
+
+            int subStrA = connectionString.IndexOf ("Database=", StringComparison.Ordinal);
+            int subStrB = connectionString.IndexOf (";", subStrA, StringComparison.Ordinal);
+            string noDatabaseConnector = m_connectionString.Substring (0, subStrA) +
+                                         m_connectionString.Substring (subStrB + 1);
 
             retry:
             try
             {
-                var params = new Dictionary<string, object>();
-                params.Add("WITH OWNER", "postgres");
-                params.Add("ENCODING", "UTF8");
-                params.Add("LC_COLLATE","en_US.UTF-8");
-                params.Add("LC_CTYPE", "en_US.UTF-8");
+                var param = new Dictionary<string, object> ();
+                param.Add ("WITH OWNER", "postgres");
+                param.Add ("ENCODING", "UTF8");
+                param.Add ("LC_COLLATE", "en_US.UTF-8");
+                param.Add ("LC_CTYPE", "en_US.UTF-8");
 
-                ExecuteNonQuery(noDatabaseConnector, "create schema IF NOT EXISTS " + c.Database, params, false);
-            }
-            catch
+                ExecuteNonQuery (noDatabaseConnector, "create schema IF NOT EXISTS " + c.Database, param, false);
+            } catch
             {
-                MainConsole.Instance.Error(
-                    "[MySQLDatabase]: We cannot connect to the MySQL instance you have provided. Please make sure it is online, and then press enter to try again.");
-                Console.Read();
+                MainConsole.Instance.Error (
+                    "[PySQLDatabase]: We cannot connect to the PySQL instance you have provided.\n" +
+                    "Please make sure it is online, and then press enter to try again.");
+                Console.Read ();
                 goto retry;
             }
 
-            var migrationManager = new MigrationManager(this, migratorName, validateTables);
-            migrationManager.DetermineOperation();
-            migrationManager.ExecuteOperation();
+            var migrationManager = new MigrationManager (this, migratorName, validateTables);
+            migrationManager.DetermineOperation ();
+            migrationManager.ExecuteOperation ();
         }
 
-        public void InitializeMonoSecurity()
+        public void InitializeMonoSecurity ()
         {
             if (Util.IsLinux)
             {
 
-                if (AppDomain.CurrentDomain.GetData("MonoSecurityPostgresAdded") == null)
+                if (AppDomain.CurrentDomain.GetData ("MonoSecurityPostgresAdded") == null)
                 {
-                    AppDomain.CurrentDomain.SetData("MonoSecurityPostgresAdded", "true");
+                    AppDomain.CurrentDomain.SetData ("MonoSecurityPostgresAdded", "true");
 
                     AppDomain currentDomain = AppDomain.CurrentDomain;
-                    currentDomain.AssemblyResolve += new ResolveEventHandler(ResolveEventHandlerMonoSec);
+                    currentDomain.AssemblyResolve += ResolveEventHandlerMonoSec;
                 }
             }
         }
 
-        private System.Reflection.Assembly ResolveEventHandlerMonoSec(object sender, ResolveEventArgs args)
+        static Assembly ResolveEventHandlerMonoSec (object sender, ResolveEventArgs args)
         {
             Assembly MyAssembly = null;
 
-            if (args.Name.Substring(0, args.Name.IndexOf(",")) == "Mono.Security")
+            if (args.Name.Substring (0, args.Name.IndexOf (",", StringComparison.Ordinal)) == "Mono.Security")
             {
-                MyAssembly = Assembly.LoadFrom("Mono.Security.dll");
+                MyAssembly = Assembly.LoadFrom ("lib/Mono.Security.dll");
             }
 
             //Return the loaded assembly.
             return MyAssembly;
         }
 
-        public void CloseDatabase(NpgsqlConnection connection)
+        public void CloseDatabase (NpgsqlConnection connection)
         {
             //Interlocked.Decrement (ref m_locked);
-            //connection.Close();
+            connection.Close ();
             //connection.Dispose();
         }
 
-        public override void CloseDatabase(DataReaderConnection conn)
+        public override void CloseDatabase (DataReaderConnection connection)
         {
-            if (conn != null && conn.DataReader != null)
-                conn.DataReader.Close();
+            if (connection != null && connection.DataReader != null)
+                connection.DataReader.Close ();
             //Interlocked.Decrement (ref m_locked);
             //m_connection.Close();
             //m_connection.Dispose();
@@ -130,210 +131,204 @@ namespace WhiteCore.DataManager.PgSQL
         #endregion
 
         #region Query
-        protected int ExecuteNonQuery(NpgsqlCommand cmd)
+        public IDataReader Query (string sql)
         {
-            //lock (m_dbLock)
-            //{
-                using (NpgsqlConnection dbcon = new NpgsqlConnection(m_connectionString))
-                {
-                    dbcon.Open();
-                    cmd.Connection = dbcon;
-
-                    try
-                    {
-                        var value = cmd.ExecuteNonQuery();
-                        dbcon.Close();
-                        return value;
-                    }
-                    catch (Exception e)
-                    {
-                        MainConsole.Instance.Error(e.Message, e);
-                        return 0;
-                    }
-                }
-            //}
+            return Query( sql, new Dictionary<string, object> ());
         }
 
-        public IDataReader Query(string sql, NpgsqlCommand cmd) // Dictionary<string, object> parameters
+        public IDataReader Query (string sql, Dictionary<string, object> parameters)
         {
             try
             {
-                //NpgsqlParameter[] param = new NpgsqlParameter[parameters.Count];
-                //int i = 0;
-                //foreach (KeyValuePair<string, object> p in parameters)
-               // {
-               //     param[i] = new NpgsqlParameter(p.Key, p.Value);
-                //    i++;
-                //}
-                NpgsqlConnection dbcon = new NpgsqlConnection(m_connectionString)
-                dbcon.Open();
-                cmd.Connection = dbcon;
+                var dbcon = new NpgsqlConnection (m_connectionString);
+                dbcon.Open ();
+                var cmd = new NpgsqlCommand (sql, dbcon);
 
-                // Define the query
-                NpgsqlCommand cmd = new NpgsqlCommand(cmd, dbcon);
-                // Execute the query
-                NpgsqlDataReader dr = cmd.ExecuteReader();
+                foreach (KeyValuePair<string, object> p in parameters)
+                     cmd.Parameters.AddWithValue (p.Key, p.Value);
+ 
+                NpgsqlDataReader dr = cmd.ExecuteReader ();
+                //dbcon.Close ();
+
                 return dr;
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Query(" + sql + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Query(" + sql + "), " + e);
                 return null;
             }
         }
 
-        public void ExecuteNonQuery(string sql, Dictionary<string, object> parameters)
+        public int ExecuteNonQuery (string sql)
         {
-            ExecuteNonQuery(m_connectionString, sql, parameters);
+            return ExecuteNonQuery (m_connectionString, sql, new Dictionary<string, object>(), true);
         }
 
-        public void ExecuteNonQuery(string connStr, string sql, Dictionary<string, object> parameters)
+        public int ExecuteNonQuery (string sql, Dictionary<string, object> parameters)
         {
-            ExecuteNonQuery(connStr, sql, parameters, true);
+            return ExecuteNonQuery (m_connectionString, sql, parameters, true);
         }
 
-        public void ExecuteNonQuery(string connStr, string sql, Dictionary<string, object> parameters, bool spamConsole)
+        public int ExecuteNonQuery (string connStr, string sql, Dictionary<string, object> parameters)
         {
+            return ExecuteNonQuery (connStr, sql, parameters, true);
+        }
+
+        public int ExecuteNonQuery (string connStr, string sql, Dictionary<string, object> parameters, bool spamConsole)
+        {
+            int retVal = 0;
             try
             {
-                NpgsqlParameter[] param = new NpgsqlParameter[parameters.Count];
-                int i = 0;
+                var dbcon = new NpgsqlConnection (connStr);
+                dbcon.Open ();
+                var cmd = new NpgsqlCommand (sql, dbcon);
+
                 foreach (KeyValuePair<string, object> p in parameters)
                 {
-                    param[i] = new NpgsqlParameter(p.Key, p.Value);
-                    i++;
+                    cmd.Parameters.AddWithValue (p.Key, p.Value);
                 }
-                MySqlHelper.ExecuteNonQuery(connStr, sql, param);
-            }
-            catch (Exception e)
+                // Execute command
+                retVal = cmd.ExecuteNonQuery ();
+
+                dbcon.Close ();
+            } catch (Exception e)
+
             {
                 if (spamConsole)
-                    MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] ExecuteNonQuery({0}), {1}", sql, e.ToString());
+                    MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ExecuteNonQuery({0}), {1}", sql, e);
                 else
                     throw e;
             }
+            return retVal;
         }
 
-        public override List<string> QueryFullData(string whereClause, string table, string wantedValue)
+        public override List<string> QueryFullData (string whereClause, string table, string wantedValue)
         {
-            string query = String.Format("select {0} from {1} {2}", wantedValue, table, whereClause);
-            return QueryFullData2(query);
+            string query = String.Format ("select {0} from {1} {2}", wantedValue, table, whereClause);
+            return QueryFullData2 (query);
         }
 
-        public override List<string> QueryFullData(string whereClause, QueryTables tables, string wantedValue)
+        public override List<string> QueryFullData (string whereClause, QueryTables tables, string wantedValue)
         {
-            string query = string.Format("SELECT {0} FROM {1} {2}", wantedValue, tables.ToSQL(), whereClause);
-            return QueryFullData2(query);
+            string query = string.Format ("SELECT {0} FROM {1} {2}", wantedValue, tables.ToSQL (), whereClause);
+            return QueryFullData2 (query);
         }
 
-        private List<string> QueryFullData2(string query)
+        List<string> QueryFullData2 (string query)
         {
-            IDataReader reader = null;
-            List<string> retVal = new List<string>();
+            var dbcon = new NpgsqlConnection (m_connectionString);
+            dbcon.Open ();
+            //NpgsqlCommand command = new NpgsqlCommand (query, dbcon);
+
+            IDataReader reader;
+            var retVal = new List<string> ();
             try
             {
-                using (reader = Query(query, new Dictionary<string, object>()))
+                using (reader = Query (query, new Dictionary<string, object> ()))
                 {
-                    while (reader.Read())
+                    while (reader.Read ())
                     {
                         for (int i = 0; i < reader.FieldCount; i++)
                         {
-                            retVal.Add(reader.GetString(i));
+                            retVal.Add (reader [i].ToString ());
                         }
                     }
+                    dbcon.Close ();
                     return retVal;
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] QueryFullData(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] QueryFullData(" + query + "), " + e);
                 return null;
             }
         }
 
-        public override DataReaderConnection QueryData(string whereClause, string table, string wantedValue)
+        public override DataReaderConnection QueryData (string whereClause, string table, string wantedValue)
         {
-            string query = String.Format("select {0} from {1} {2}", wantedValue, table, whereClause);
-            return new DataReaderConnection {DataReader = QueryData2(query)};
+            string query = String.Format ("select {0} from {1} {2}", wantedValue, table, whereClause);
+            return new DataReaderConnection { DataReader = QueryData2 (query) };
         }
 
-        public override DataReaderConnection QueryData(string whereClause, QueryTables tables, string wantedValue)
+        public override DataReaderConnection QueryData (string whereClause, QueryTables tables, string wantedValue)
         {
-            string query = string.Format("SELECT {0} FROM {1} {2}", wantedValue, tables.ToSQL(), whereClause);
-            return new DataReaderConnection {DataReader = QueryData2(query)};
+            string query = string.Format ("SELECT {0} FROM {1} {2}", wantedValue, tables.ToSQL (), whereClause);
+            return new DataReaderConnection { DataReader = QueryData2 (query) };
         }
 
-        private IDataReader QueryData2(string query)
+        IDataReader QueryData2 (string query)
         {
-            return Query(query, new Dictionary<string, object>());
+            return Query (query, new Dictionary<string, object> ());
         }
 
-        public override List<string> Query(string[] wantedValue, string table, QueryFilter queryFilter,
+        public override List<string> Query (string[] wantedValue, string table, QueryFilter queryFilter,
                                            Dictionary<string, bool> sort, uint? start, uint? count)
         {
-            string query = string.Format("SELECT {0} FROM {1}", string.Join(", ", wantedValue), table);
-            return Query2(query, queryFilter, sort, start, count);
+            string query = string.Format ("SELECT {0} FROM {1}", string.Join (", ", wantedValue), table);
+            return Query2 (query, queryFilter, sort, start, count);
         }
 
-        public override List<string> Query(string[] wantedValue, QueryTables tables, QueryFilter queryFilter,
+        public override List<string> Query (string[] wantedValue, QueryTables tables, QueryFilter queryFilter,
                                            Dictionary<string, bool> sort, uint? start, uint? count)
         {
-            string query = string.Format("SELECT {0} FROM {1}", string.Join(", ", wantedValue), tables.ToSQL());
-            return Query2(query, queryFilter, sort, start, count);
+            string query = string.Format ("SELECT {0} FROM {1}", string.Join (", ", wantedValue), tables.ToSQL ());
+            return Query2 (query, queryFilter, sort, start, count);
         }
 
-        private List<string> Query2(string sqll, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
-                                    uint? count)
+        List<string> Query2 (string sqll, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
+                            uint? count)
         {
             string query = sqll;
-            Dictionary<string, object> ps = new Dictionary<string, object>();
-            List<string> retVal = new List<string>();
-            List<string> parts = new List<string>();
+            var ps = new Dictionary<string, object> ();
+            var retVal = new List<string> ();
+            var parts = new List<string> ();
 
             if (queryFilter != null && queryFilter.Count > 0)
             {
-                query += " WHERE " + queryFilter.ToSQL('?', out ps);
+                query += " WHERE " + queryFilter.ToSQL (':', out ps);
             }
 
             if (sort != null && sort.Count > 0)
             {
-                parts = new List<string>();
+                parts = new List<string> ();
                 foreach (KeyValuePair<string, bool> sortOrder in sort)
                 {
-                    parts.Add(string.Format("`{0}` {1}", sortOrder.Key, sortOrder.Value ? "ASC" : "DESC"));
+                    parts.Add (string.Format ("`{0}` {1}", sortOrder.Key, sortOrder.Value ? "ASC" : "DESC"));
                 }
-                query += " ORDER BY " + string.Join(", ", parts.ToArray());
+                query += " ORDER BY " + string.Join (", ", parts.ToArray ());
             }
 
             if (start.HasValue)
             {
-                query += " LIMIT " + start.Value.ToString();
+                query += " LIMIT " + start.Value;
                 if (count.HasValue)
                 {
-                    query += ", " + count.Value.ToString();
+                    query += ", " + count.Value;
                 }
             }
 
-            IDataReader reader = null;
+            var dbcon = new NpgsqlConnection (m_connectionString);
+            dbcon.Open ();
+            //NpgsqlCommand command = new NpgsqlCommand (query, dbcon);
+
+            IDataReader reader;
             int i = 0;
             try
             {
-                using (reader = Query(query, ps))
+                using (reader = Query (query, ps))
                 {
-                    while (reader.Read())
+                    while (reader.Read ())
                     {
                         for (i = 0; i < reader.FieldCount; i++)
                         {
-                            Type r = reader[i].GetType();
-                            retVal.Add(r == typeof (DBNull) ? null : reader.GetString(i));
+                            Type r = reader [i].GetType ();
+                            retVal.Add (r == typeof(DBNull) ? null : reader [i].ToString ());
                         }
                     }
+                    dbcon.Close ();
                     return retVal;
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Query(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Query(" + query + "), " + e);
                 return null;
             }
         }
@@ -342,128 +337,132 @@ namespace WhiteCore.DataManager.PgSQL
         {
         }*/
 
-        public override Dictionary<string, List<string>> QueryNames(string[] keyRow, object[] keyValue, string table,
+        public override Dictionary<string, List<string>> QueryNames (string[] keyRow, object[] keyValue, string table,
                                                                     string wantedValue)
         {
-            string query = String.Format("select {0} from {1} where ", wantedValue, table);
-            return QueryNames2(keyRow, keyValue, query);
+            string query = String.Format ("select {0} from {1} where ", wantedValue, table);
+            return QueryNames2 (keyRow, keyValue, query);
         }
 
-        public override Dictionary<string, List<string>> QueryNames(string[] keyRow, object[] keyValue,
+        public override Dictionary<string, List<string>> QueryNames (string[] keyRow, object[] keyValue,
                                                                     QueryTables tables, string wantedValue)
         {
-            string query = string.Format("SELECT {0} FROM {1} where ", wantedValue, tables.ToSQL());
-            return QueryNames2(keyRow, keyValue, query);
+            string query = string.Format ("SELECT {0} FROM {1} where ", wantedValue, tables.ToSQL ());
+            return QueryNames2 (keyRow, keyValue, query);
         }
 
-        private Dictionary<string, List<string>> QueryNames2(string[] keyRow, object[] keyValue, string query)
+        Dictionary<string, List<string>> QueryNames2 (IList<string> keyRow, object[] keyValue, string query)
         {
-            IDataReader reader = null;
-            Dictionary<string, List<string>> retVal = new Dictionary<string, List<string>>();
-            Dictionary<string, object> ps = new Dictionary<string, object>();
+
+            var retVal = new Dictionary<string, List<string>> ();
+            var ps = new Dictionary<string, object> ();
+
             int i = 0;
             foreach (object value in keyValue)
             {
-                query += String.Format("{0} = ?{1} and ", keyRow[i], keyRow[i]);
-                ps["?" + keyRow[i]] = value;
+                query += String.Format ("{0} = :{1} and ", keyRow [i], keyRow [i]);
+                ps [":" + keyRow [i]] = value;
                 i++;
             }
-            query = query.Remove(query.Length - 5);
+            query = query.Remove (query.Length - 5);
 
+            var dbcon = new NpgsqlConnection (m_connectionString);
+            dbcon.Open ();
+            //var command = new NpgsqlCommand (query, dbcon);
+
+            IDataReader reader;
             try
             {
-                using (reader = Query(query, ps))
+                using (reader = Query (query, ps))
                 {
-                    while (reader.Read())
+                    while (reader.Read ())
                     {
                         for (i = 0; i < reader.FieldCount; i++)
                         {
-                            Type r = reader[i].GetType();
-                            AddValueToList(ref retVal, reader.GetName(i),
-                                           r == typeof (DBNull) ? null : reader[i].ToString());
+                            Type r = reader [i].GetType ();
+                            AddValueToList (ref retVal, reader.GetName (i), r == typeof(DBNull) ? null : reader [i].ToString ());
                         }
                     }
+                    dbcon.Close ();
                     return retVal;
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] QueryNames(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] QueryNames(" + query + "), " + e);
                 return null;
             }
         }
 
-        private void AddValueToList(ref Dictionary<string, List<string>> dic, string key, string value)
+        static void AddValueToList (ref Dictionary<string, List<string>> dic, string key, string value)
         {
-            if (!dic.ContainsKey(key))
+            if (!dic.ContainsKey (key))
             {
-                dic.Add(key, new List<string>());
+                dic.Add (key, new List<string> ());
             }
 
-            dic[key].Add(value);
+            dic [key].Add (value);
         }
 
         #endregion
 
         #region Update
 
-        public override bool Update(string table, Dictionary<string, object> values,
-                                    Dictionary<string, int> incrementValues, QueryFilter queryFilter, uint? start,
+        public override bool Update (string table, Dictionary<string, object> values,
+                                    Dictionary<string, int> incrementValue, QueryFilter queryFilter, uint? start,
                                     uint? count)
         {
-            if ((values == null || values.Count < 1) && (incrementValues == null || incrementValues.Count < 1))
+            if ((values == null || values.Count < 1) && (incrementValue == null || incrementValue.Count < 1))
             {
-                MainConsole.Instance.Warn("Update attempted with no values");
+                MainConsole.Instance.Warn ("Update attempted with no values");
                 return false;
             }
 
-            string query = string.Format("UPDATE {0}", table);
-            Dictionary<string, object> ps = new Dictionary<string, object>();
+            string query = string.Format ("UPDATE {0}", table);
+            var ps = new Dictionary<string, object> ();
 
             string filter = "";
             if (queryFilter != null && queryFilter.Count > 0)
             {
-                filter = " WHERE " + queryFilter.ToSQL('?', out ps);
+                filter = " WHERE " + queryFilter.ToSQL (':', out ps);
             }
 
-            List<string> parts = new List<string>();
+            var parts = new List<string> ();
             if (values != null)
             {
                 foreach (KeyValuePair<string, object> value in values)
                 {
-                    string key = "?updateSet_" + value.Key.Replace("`", "");
-                    ps[key] = value.Value;
-                    parts.Add(string.Format("{0} = {1}", value.Key, key));
+                    string key = ":updateSet_" + value.Key.Replace ("`", "");
+                    ps [key] = value.Value;
+                    parts.Add (string.Format ("{0} = {1}", value.Key, key));
                 }
             }
-            if (incrementValues != null)
+            if (incrementValue != null)
             {
-                foreach (KeyValuePair<string, int> value in incrementValues)
+                foreach (KeyValuePair<string, int> value in incrementValue)
                 {
-                    string key = "?updateSet_increment_" + value.Key.Replace("`", "");
-                    ps[key] = value.Value;
-                    parts.Add(string.Format("{0} = {0} + {1}", value.Key, key));
+                    string key = ":updateSet_increment_" + value.Key.Replace ("`", "");
+                    ps [key] = value.Value;
+                    parts.Add (string.Format ("{0} = {0} + {1}", value.Key, key));
                 }
             }
 
-            query += " SET " + string.Join(", ", parts.ToArray()) + filter;
+            query += " SET " + string.Join (", ", parts.ToArray ()) + filter;
 
             if (start.HasValue)
             {
-                query += " LIMIT " + start.Value.ToString();
+                query += " LIMIT " + start.Value;
                 if (count.HasValue)
                 {
-                    query += ", " + count.Value.ToString();
+                    query += ", " + count.Value;
                 }
             }
 
             try
             {
-                ExecuteNonQuery(query, ps);
-            }
-            catch (NpgsqlException e)
+                ExecuteNonQuery (query, ps);
+            } catch (NpgsqlException e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Update(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Update(" + query + "), " + e);
             }
             return true;
         }
@@ -472,136 +471,135 @@ namespace WhiteCore.DataManager.PgSQL
 
         #region Insert
 
-        public override bool InsertMultiple(string table, List<object[]> values)
+        public override bool InsertMultiple (string table, List<object[]> values)
         {
-            string query = String.Format("insert into {0} select ", table);
-            Dictionary<string, object> parameters = new Dictionary<string, object>();
+            string query = String.Format ("insert into {0} select ", table);
+            var parameters = new Dictionary<string, object> ();
             int i = 0;
+
             foreach (object[] value in values)
             {
                 foreach (object v in value)
                 {
-                    parameters[Util.ConvertDecString(i)] = v;
-                    query += "?" + Util.ConvertDecString(i++) + ",";
+                    parameters [Util.ConvertDecString (i)] = v;
+                    query += ":" + Util.ConvertDecString (i++) + ",";
                 }
-                query = query.Remove(query.Length - 1);
+                query = query.Remove (query.Length - 1);
                 query += " union all select ";
             }
-            query = query.Remove(query.Length - (" union all select ").Length);
+            query = query.Remove (query.Length - (" union all select ").Length);
 
             try
             {
-                ExecuteNonQuery(query, parameters);
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, parameters);
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Insert(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Insert(" + query + "), " + e);
             }
             return true;
         }
 
-        public override bool Insert(string table, object[] values)
+        public override bool Insert (string table, object[] values)
         {
-            string query = String.Format("insert into {0} values (", table);
-            Dictionary<string, object> parameters = new Dictionary<string, object>();
+            string query = String.Format ("insert into {0} values (", table);
+            var parameters = new Dictionary<string, object> ();
             int i = 0;
+
             foreach (object o in values)
             {
-                parameters[Util.ConvertDecString(i)] = o;
-                query += "?" + Util.ConvertDecString(i++) + ",";
+                parameters [Util.ConvertDecString (i)] = o;
+                query += ":" + Util.ConvertDecString (i++) + ",";
             }
-            query = query.Remove(query.Length - 1);
+            query = query.Remove (query.Length - 1);
             query += ")";
 
             try
             {
-                ExecuteNonQuery(query, parameters);
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, parameters);
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Insert(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Insert(" + query + "), " + e);
             }
             return true;
         }
 
-        private bool InsertOrReplace(string table, Dictionary<string, object> row, bool insert)
+        bool InsertOrReplace (string table, Dictionary<string, object> row, bool insert)
         {
-            string query = (insert ? "INSERT" : "REPLACE") + " INTO " + table + " (" +
-                           string.Join(", ", row.Keys.ToArray<string>()) + ")";
-            Dictionary<string, object> ps = new Dictionary<string, object>();
+            string query = (insert ? "INSERT" : "REPLACE") + " INTO " + table +
+                " (" + string.Join (", ", row.Keys.ToArray<string> ()) + ")";
+            var ps = new Dictionary<string, object> ();
+
             foreach (KeyValuePair<string, object> field in row)
             {
-                string key = "?" +
-                             field.Key.Replace("`", "")
-                                  .Replace("(", "_")
-                                  .Replace(")", "")
-                                  .Replace(" ", "_")
-                                  .Replace("-", "minus")
-                                  .Replace("+", "add")
-                                  .Replace("/", "divide")
-                                  .Replace("*", "multiply");
-                ps[key] = field.Value;
+                string key = ":" +
+                             field.Key.Replace ("`", "")
+                                  .Replace ("(", "_")
+                                  .Replace (")", "")
+                                  .Replace (" ", "_")
+                                  .Replace ("-", "minus")
+                                  .Replace ("+", "add")
+                                  .Replace ("/", "divide")
+                                  .Replace ("*", "multiply");
+                ps [key] = field.Value;
             }
-            query += " VALUES( " + string.Join(", ", ps.Keys.ToArray<string>()) + " )";
+            query += " VALUES( " + string.Join (", ", ps.Keys.ToArray<string> ()) + " )";
 
             try
             {
-                ExecuteNonQuery(query, ps);
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, ps);
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] " + (insert ? "Insert" : "Replace") + "(" + query + "), " +
-                                           e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] " + (insert ? "Insert" : "Replace") + "(" + query + "), " +
+                e);
             }
             return true;
         }
 
-        public override bool Insert(string table, Dictionary<string, object> row)
+        public override bool Insert (string table, Dictionary<string, object> row)
         {
-            return InsertOrReplace(table, row, true);
+            return InsertOrReplace (table, row, true);
         }
 
-        public override bool Insert(string table, object[] values, string updateKey, object updateValue)
+        public override bool Insert (string table, object[] values, string updateKey, object updateValue)
         {
-            string query = String.Format("insert into {0} VALUES(", table);
-            Dictionary<string, object> param = new Dictionary<string, object>();
+            string query = String.Format ("insert into {0} VALUES(", table);
+            var param = new Dictionary<string, object> ();
             int i = 0;
+
             foreach (object o in values)
             {
-                param["?" + Util.ConvertDecString(i)] = o;
-                query += "?" + Util.ConvertDecString(i++) + ",";
+                param ["?" + Util.ConvertDecString (i)] = o;
+                query += "?" + Util.ConvertDecString (i++) + ",";
             }
-            param["?update"] = updateValue;
-            query = query.Remove(query.Length - 1);
-            query += String.Format(") ON DUPLICATE KEY UPDATE {0} = ?update", updateKey);
+            param [":update"] = updateValue;
+            query = query.Remove (query.Length - 1);
+            query += String.Format (") ON DUPLICATE KEY UPDATE {0} = :update", updateKey);    // TODO:  THIS WILL BREAK!!!
             try
             {
-                ExecuteNonQuery(query, param);
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, param);
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Insert(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Insert(" + query + "), " + e);
                 return false;
             }
             return true;
         }
 
-        public override bool InsertSelect(string tableA, string[] fieldsA, string tableB, string[] valuesB)
+        public override bool InsertSelect (string tableA, string[] fieldsA, string tableB, string[] valuesB)
         {
-            string query = string.Format("INSERT INTO {0}{1} SELECT {2} FROM {3}",
-                                         tableA,
-                                         (fieldsA.Length > 0 ? " (" + string.Join(", ", fieldsA) + ")" : ""),
-                                         string.Join(", ", valuesB),
-                                         tableB
-                );
+            string query = string.Format ("INSERT INTO {0}{1} SELECT {2} FROM {3}",
+                               tableA,
+                               (fieldsA.Length > 0 ? " (" + string.Join (", ", fieldsA) + ")" : ""),
+                               string.Join (", ", valuesB),
+                               tableB
+                           );
 
             try
             {
-                ExecuteNonQuery(query, new Dictionary<string, object>(0));
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, new Dictionary<string, object> (0));
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] INSERT .. SELECT (" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] INSERT .. SELECT (" + query + "), " + e);
             }
             return true;
         }
@@ -610,36 +608,35 @@ namespace WhiteCore.DataManager.PgSQL
 
         #region REPLACE INTO
 
-        public override bool Replace(string table, Dictionary<string, object> row)
+        public override bool Replace (string table, Dictionary<string, object> row)
         {
-            return InsertOrReplace(table, row, false);
+            return InsertOrReplace (table, row, false);
         }
 
         #endregion
 
         #region Delete
 
-        public override bool DeleteByTime(string table, string key)
+        public override bool DeleteByTime (string table, string key)
         {
-            QueryFilter filter = new QueryFilter();
-            filter.andLessThanEqFilters["(UNIX_TIMESTAMP(`" + key.Replace("`", "") + "`) - UNIX_TIMESTAMP())"] = 0;
+            var filter = new QueryFilter ();
+            filter.andLessThanEqFilters ["(UNIX_TIMESTAMP(`" + key.Replace ("`", "") + "`) - UNIX_TIMESTAMP())"] = 0;
 
-            return Delete(table, filter);
+            return Delete (table, filter);
         }
 
-        public override bool Delete(string table, QueryFilter queryFilter)
+        public override bool Delete (string table, QueryFilter queryFilter)
         {
-            Dictionary<string, object> ps = new Dictionary<string, object>();
+            var ps = new Dictionary<string, object> ();
             string query = "DELETE FROM " + table +
-                           (queryFilter != null ? (" WHERE " + queryFilter.ToSQL('?', out ps)) : "");
+                (queryFilter != null ? (" WHERE " + queryFilter.ToSQL (':', out ps)) : "");
 
             try
             {
-                ExecuteNonQuery(query, ps);
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query, ps);
+            } catch (Exception e)
             {
-                MainConsole.Instance.Error("[PgSQLDataLoader] Delete(" + query + "), " + e);
+                MainConsole.Instance.Error ("[PgSQLDataLoader] Delete(" + query + "), " + e);
                 return false;
             }
             return true;
@@ -647,24 +644,24 @@ namespace WhiteCore.DataManager.PgSQL
 
         #endregion
 
-        public override string ConCat(string[] toConcat)
+        public override string ConCat (string[] toConcat)
         {
-            string returnValue = toConcat.Aggregate("concat(", (current, s) => current + (s + ","));
-            return returnValue.Substring(0, returnValue.Length - 1) + ")";
+            string returnValue = toConcat.Aggregate ("concat(", (current, s) => current + (s + ","));
+            return returnValue.Substring (0, returnValue.Length - 1) + ")";
         }
 
         #region Tables
 
-        public override void CreateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indices)
+        public override void CreateTable (string table, ColumnDefinition[] columns, IndexDefinition[] indexDefinitions)
         {
-            table = table.ToLower();
-            if (TableExists(table))
+            table = table.ToLower ();
+            if (TableExists (table))
             {
-                throw new DataManagerException("Trying to create a table with name of one that already exists.");
+                throw new DataManagerException ("Trying to create a table with name of one that already exists.");
             }
 
             IndexDefinition primary = null;
-            foreach (IndexDefinition index in indices)
+            foreach (IndexDefinition index in indexDefinitions)
             {
                 if (index.Type == IndexType.Primary)
                 {
@@ -673,87 +670,114 @@ namespace WhiteCore.DataManager.PgSQL
                 }
             }
 
-            List<string> columnDefinition = new List<string>();
+            var columnDefinition = new List<string> ();
 
             foreach (ColumnDefinition column in columns)
             {
-                columnDefinition.Add("`" + column.Name + "` " + GetColumnTypeStringSymbol(column.Type));
+//                columnDefinition.Add ("`" + column.Name + "` TYPE  " + GetColumnTypeStringSymbol (column.Type));
+                columnDefinition.Add (column.Name + " " + GetColumnTypeStringSymbol (column.Type));
+
             }
             if (primary != null && primary.Fields.Length > 0)
             {
-                columnDefinition.Add("PRIMARY KEY (`" + string.Join("`, `", primary.Fields) + "`)");
+//                columnDefinition.Add ("PRIMARY KEY (`" + string.Join ("`, `", primary.Fields) + "`)");
+                columnDefinition.Add ("PRIMARY KEY (" + string.Join (", ", primary.Fields) + ")");
             }
 
-            List<string> indicesQuery = new List<string>(indices.Length);
-            foreach (IndexDefinition index in indices)
+
+
+            var indicesQuery = new List<string> (indexDefinitions.Length);
+            var indicesExtra = new List<string> ();
+
+            // add any unique 
+            foreach (IndexDefinition index in indexDefinitions)
             {
-                string type = "KEY";
+                string type;
                 switch (index.Type)
                 {
-                    case IndexType.Primary:
-                        continue;
-                    case IndexType.Unique:
-                        type = "UNIQUE";
-                        break;
-                    case IndexType.Index:
-                    default:
-                        type = "KEY";
-                        break;
+                case IndexType.Primary:
+                    continue;
+                case IndexType.Unique:
+                    type = "UNIQUE";
+                    break;
+                default:
+                    //type = "KEY";
+                    //break;
+                    indicesExtra.Add ("CREATE INDEX idx_" + string.Join ("_", index.Fields) + " ON " + table + "(" +
+                    string.Join (", ", index.Fields) + ")");
+                    continue;
                 }
 
                 if (index.IndexSize == 0)
-                    indicesQuery.Add(string.Format("{0}( {1} )", type, "`" + string.Join("`, `", index.Fields) + "`"));
+                    //indicesQuery.Add (string.Format ("{0}( {1} )", type, "`" + string.Join ("`, `", index.Fields) + "`"));
+                    indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields)));
                 else
-                    indicesQuery.Add(string.Format("{0}( {1} )", type, "`" + string.Join("`, `", index.Fields) + "`"+"("+index.IndexSize+")"));
+                    //indicesQuery.Add (string.Format ("{0}( {1} )", type, "`" + string.Join ("`, `", index.Fields) + "`" + "(" + index.IndexSize + ")"));
+                    indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields) + "(" + index.IndexSize + ")"));
 
             }
 
-            string query = string.Format("create table " + table + " ( {0} {1}) DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci",
-                                         string.Join(", ", columnDefinition.ToArray()),
-                                         indicesQuery.Count > 0
-                                             ? ", " + string.Join(", ", indicesQuery.ToArray())
+            string query = string.Format ("CREATE TABLE " + table + " ( {0} {1})",
+                               string.Join (", ", columnDefinition.ToArray ()),
+                               indicesQuery.Count > 0
+                                             ? ", " + string.Join (", ", indicesQuery.ToArray ())
                                              : string.Empty);
+            // need to create additional indexes using the CREATE INDEX command
+            // eg CREATE INDEX idx_flags_scope ON gridregions( Flags, ScopeID );
 
             try
             {
-                ExecuteNonQuery(query, new Dictionary<string, object>());
-            }
-            catch (Exception e)
+                ExecuteNonQuery (query);
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] CreateTable: {0}", e.ToString());
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] CreateTable: {0}", e);
+            }
+
+            // additional index's?
+            if (indicesExtra.Count > 0)
+            {
+                foreach (string idxquery in indicesExtra)
+                {
+                    try
+                    {
+                        ExecuteNonQuery (idxquery);
+                    } catch (Exception e)
+                    {
+                        MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] Create index: {0}", e);
+                    }
+                }
             }
         }
 
-        public override void UpdateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indices,
+        public override void UpdateTable (string table, ColumnDefinition[] columns, IndexDefinition[] indexDefinitions,
                                          Dictionary<string, string> renameColumns)
         {
-            table = table.ToLower();
-            if (!TableExists(table))
+            table = table.ToLower ();
+            if (!TableExists (table))
             {
-                throw new DataManagerException("Trying to update a table with name of one that does not exist.");
+                throw new DataManagerException ("Trying to update a table with name of one that does not exist.");
             }
 
-            List<ColumnDefinition> oldColumns = ExtractColumnsFromTable(table);
+            List<ColumnDefinition> oldColumns = ExtractColumnsFromTable (table);
 
-            Dictionary<string, ColumnDefinition> removedColumns = new Dictionary<string, ColumnDefinition>();
-            Dictionary<string, ColumnDefinition> modifiedColumns = new Dictionary<string, ColumnDefinition>();
+            var removedColumns = new Dictionary<string, ColumnDefinition> ();
+            var modifiedColumns = new Dictionary<string, ColumnDefinition> ();
 
             Dictionary<string, ColumnDefinition> addedColumns =
-                columns.Where(column => !oldColumns.Contains(column)).ToDictionary(column => column.Name.ToLower());
+                columns.Where (column => !oldColumns.Contains (column)).ToDictionary (column => column.Name.ToLower ());
             foreach (ColumnDefinition column in oldColumns.Where(column => !columns.Contains(column)))
             {
-                if (addedColumns.ContainsKey(column.Name.ToLower()))
+                if (addedColumns.ContainsKey (column.Name.ToLower ()))
                 {
-                    if (column.Name.ToLower() != addedColumns[column.Name.ToLower()].Name.ToLower() ||
-                        column.Type != addedColumns[column.Name.ToLower()].Type)
+                    if (column.Name.ToLower () != addedColumns [column.Name.ToLower ()].Name.ToLower () ||
+                        column.Type != addedColumns [column.Name.ToLower ()].Type)
                     {
-                        modifiedColumns.Add(column.Name.ToLower(), addedColumns[column.Name.ToLower()]);
+                        modifiedColumns.Add (column.Name.ToLower (), addedColumns [column.Name.ToLower ()]);
                     }
-                    addedColumns.Remove(column.Name.ToLower());
-                }
-                else
+                    addedColumns.Remove (column.Name.ToLower ());
+                } else
                 {
-                    removedColumns.Add(column.Name.ToLower(), column);
+                    removedColumns.Add (column.Name.ToLower (), column);
                 }
             }
 
@@ -762,58 +786,54 @@ namespace WhiteCore.DataManager.PgSQL
                 foreach (
                     string query in
                         addedColumns.Values.Select(
-                            column => "add `" + column.Name + "` " + GetColumnTypeStringSymbol(column.Type) +
+                            column => "add '" + column.Name + "' " + GetColumnTypeStringSymbol(column.Type) +
                                       " ")
                                     .Select(
                                         addedColumnsQuery =>
                                         string.Format("alter table " + table + " " + addedColumnsQuery)))
                 {
-                    ExecuteNonQuery(query, new Dictionary<string, object>());
+                    ExecuteNonQuery (query, new Dictionary<string, object> ());
                 }
                 foreach (
-                    string query in modifiedColumns.Values.Select(column => "modify column `" + column.Name + "` " +
-                                                                            GetColumnTypeStringSymbol(column.Type) + " ")
-                                                   .Select(
-                                                       modifiedColumnsQuery =>
-                                                       string.Format("alter table " + table + " " + modifiedColumnsQuery))
-                    )
+                    string query in modifiedColumns.Values.Select(
+                        column => "modify column '" + column.Name + "' " + GetColumnTypeStringSymbol(column.Type) + " ")
+                    .Select(
+                        modifiedColumnsQuery => string.Format("alter table " + table + " " + modifiedColumnsQuery)))
                 {
-                    ExecuteNonQuery(query, new Dictionary<string, object>());
+                    ExecuteNonQuery (query, new Dictionary<string, object> ());
                 }
                 foreach (
                     string query in
-                        removedColumns.Values.Select(column => "drop `" + column.Name + "` ")
+                        removedColumns.Values.Select(column => "drop '" + column.Name + "' ")
                                       .Select(
-                                          droppedColumnsQuery =>
-                                          string.Format("alter table " + table + " " + droppedColumnsQuery)))
+                                          droppedColumnsQuery => string.Format("alter table " + table + " " + droppedColumnsQuery)))
                 {
-                    ExecuteNonQuery(query, new Dictionary<string, object>());
+                    ExecuteNonQuery (query, new Dictionary<string, object> ());
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] UpdateTable: {0}", e);
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] UpdateTable: {0}", e);
             }
 
-            Dictionary<string, IndexDefinition> oldIndicesDict = ExtractIndicesFromTable(table);
+            Dictionary<string, IndexDefinition> oldIndicesDict = ExtractIndicesFromTable (table);
 
-            List<string> removeIndices = new List<string>();
-            List<string> oldIndexNames = new List<string>(oldIndicesDict.Count);
-            List<IndexDefinition> oldIndices = new List<IndexDefinition>(oldIndicesDict.Count);
-            List<IndexDefinition> newIndices = new List<IndexDefinition>();
+            var removeIndices = new List<string> ();
+            var oldIndexNames = new List<string> (oldIndicesDict.Count);
+            var oldIndices = new List<IndexDefinition> (oldIndicesDict.Count);
+            var newIndices = new List<IndexDefinition> ();
 
             foreach (KeyValuePair<string, IndexDefinition> oldIndex in oldIndicesDict)
             {
-                oldIndexNames.Add(oldIndex.Key);
-                oldIndices.Add(oldIndex.Value);
+                oldIndexNames.Add (oldIndex.Key);
+                oldIndices.Add (oldIndex.Value);
             }
             int i = 0;
             foreach (IndexDefinition oldIndex in oldIndices)
             {
                 bool found = false;
-                foreach (IndexDefinition newIndex in indices)
+                foreach (IndexDefinition newIndex in indexDefinitions)
                 {
-                    if (oldIndex.Equals(newIndex))
+                    if (oldIndex.Equals (newIndex))
                     {
                         found = true;
                         break;
@@ -821,17 +841,17 @@ namespace WhiteCore.DataManager.PgSQL
                 }
                 if (!found)
                 {
-                    removeIndices.Add(oldIndexNames[i]);
+                    removeIndices.Add (oldIndexNames [i]);
                 }
                 ++i;
             }
 
-            foreach (IndexDefinition newIndex in indices)
+            foreach (IndexDefinition newIndex in indexDefinitions)
             {
                 bool found = false;
                 foreach (IndexDefinition oldIndex in oldIndices)
                 {
-                    if (oldIndex.Equals(newIndex))
+                    if (oldIndex.Equals (newIndex))
                     {
                         found = true;
                         break;
@@ -839,180 +859,180 @@ namespace WhiteCore.DataManager.PgSQL
                 }
                 if (!found)
                 {
-                    newIndices.Add(newIndex);
+                    newIndices.Add (newIndex);
                 }
             }
 
             foreach (string oldIndex in removeIndices)
             {
-                ExecuteNonQuery(string.Format("ALTER TABLE `{0}` DROP INDEX `{1}`", table, oldIndex),
-                                new Dictionary<string, object>());
+                ExecuteNonQuery (string.Format ("ALTER TABLE {0} DROP INDEX {1}", table, oldIndex),
+                    new Dictionary<string, object> ());
             }
             foreach (IndexDefinition newIndex in newIndices)
             {
-                ExecuteNonQuery(
-                    string.Format("ALTER TABLE `{0}` ADD {1} (`{2}`)", table,
-                                  newIndex.Type == IndexType.Primary
+                ExecuteNonQuery (
+                    string.Format ("ALTER TABLE {0} ADD {1} ({2})", table,
+                        newIndex.Type == IndexType.Primary
                                       ? "PRIMARY KEY"
                                       : (newIndex.Type == IndexType.Unique ? "UNIQUE" : "INDEX"),
-                                  string.Join("`, `", newIndex.Fields)), new Dictionary<string, object>());
+                        string.Join (", ", newIndex.Fields)), new Dictionary<string, object> ());
             }
         }
 
-        public override string GetColumnTypeStringSymbol(ColumnTypes type)
+        public override string GetColumnTypeStringSymbol (ColumnTypes type)
         {
             switch (type)
             {
-                case ColumnTypes.Double:
-                    return "DOUBLE PRECISION";
-                case ColumnTypes.Integer11:
-                return "INT";       // need to process unsigned // (11)";
-                case ColumnTypes.Integer30:
-                return "INT";       // need to process unsigned // (30)";
+            case ColumnTypes.Double:
+                return "DOUBLE PRECISION";
+            case ColumnTypes.Integer11:
+                return "INTEGER";       // need to process unsigned // (11)";
+            case ColumnTypes.Integer30:
+                return "BIGINT";       // need to process unsigned // (30)";
             case ColumnTypes.UInteger11:
-                return "INT";       // need to process unsigned // (11) UNSIGNED";
-                case ColumnTypes.UInteger30:
-                return "INT";       // need to process unsigned // (30) UNSIGNED";
-                case ColumnTypes.Char40:
-                    return "CHAR(40)";
-                case ColumnTypes.Char39:
-                    return "CHAR(39)";
-                case ColumnTypes.Char38:
-                    return "CHAR(38)";
-                case ColumnTypes.Char37:
-                    return "CHAR(37)";
-                case ColumnTypes.Char36:
-                    return "CHAR(36)";
-                case ColumnTypes.Char35:
-                    return "CHAR(35)";
-                case ColumnTypes.Char34:
-                    return "CHAR(34)";
-                case ColumnTypes.Char33:
-                    return "CHAR(33)";
-                case ColumnTypes.Char32:
-                    return "CHAR(32)";
-                case ColumnTypes.Char5:
-                    return "CHAR(5)";
-                case ColumnTypes.Char1:
-                    return "CHAR(1)";
-                case ColumnTypes.Char2:
-                    return "CHAR(2)";
-                case ColumnTypes.String:
-                    return "TEXT";
-                case ColumnTypes.String10:
-                    return "VARCHAR(10)";
-                case ColumnTypes.String16:
-                    return "VARCHAR(16)";
-                case ColumnTypes.String30:
-                    return "VARCHAR(30)";
-                case ColumnTypes.String32:
-                    return "VARCHAR(32)";
-                case ColumnTypes.String36:
-                    return "VARCHAR(36)";
-                case ColumnTypes.String45:
-                    return "VARCHAR(45)";
-                case ColumnTypes.String50:
-                    return "VARCHAR(50)";
-                case ColumnTypes.String64:
-                    return "VARCHAR(64)";
-                case ColumnTypes.String128:
-                    return "VARCHAR(128)";
-                case ColumnTypes.String100:
-                    return "VARCHAR(100)";
-                case ColumnTypes.String255:
-                    return "VARCHAR(255)";
-                case ColumnTypes.String512:
-                    return "VARCHAR(512)";
-                case ColumnTypes.String1024:
-                    return "VARCHAR(1024)";
-                case ColumnTypes.String8196:
-                    return "VARCHAR(8196)";
-                case ColumnTypes.Text:
-                    return "TEXT";
-                case ColumnTypes.MediumText:
-                    return "TEXT";
-                case ColumnTypes.LongText:
-                    return "TEXT";
-                case ColumnTypes.Blob:
+                return "INTEGER";       // need to process unsigned // (11) UNSIGNED";
+            case ColumnTypes.UInteger30:
+                return "Bigint";       // need to process unsigned // (30) UNSIGNED";
+            case ColumnTypes.Char40:
+                return "CHAR(40)";
+            case ColumnTypes.Char39:
+                return "CHAR(39)";
+            case ColumnTypes.Char38:
+                return "CHAR(38)";
+            case ColumnTypes.Char37:
+                return "CHAR(37)";
+            case ColumnTypes.Char36:
+                return "CHAR(36)";
+            case ColumnTypes.Char35:
+                return "CHAR(35)";
+            case ColumnTypes.Char34:
+                return "CHAR(34)";
+            case ColumnTypes.Char33:
+                return "CHAR(33)";
+            case ColumnTypes.Char32:
+                return "CHAR(32)";
+            case ColumnTypes.Char5:
+                return "CHAR(5)";
+            case ColumnTypes.Char1:
+                return "CHAR(1)";
+            case ColumnTypes.Char2:
+                return "CHAR(2)";
+            case ColumnTypes.String:
+                return "TEXT";
+            case ColumnTypes.String10:
+                return "VARCHAR(10)";
+            case ColumnTypes.String16:
+                return "VARCHAR(16)";
+            case ColumnTypes.String30:
+                return "VARCHAR(30)";
+            case ColumnTypes.String32:
+                return "VARCHAR(32)";
+            case ColumnTypes.String36:
+                return "VARCHAR(36)";
+            case ColumnTypes.String45:
+                return "VARCHAR(45)";
+            case ColumnTypes.String50:
+                return "VARCHAR(50)";
+            case ColumnTypes.String64:
+                return "VARCHAR(64)";
+            case ColumnTypes.String128:
+                return "VARCHAR(128)";
+            case ColumnTypes.String100:
+                return "VARCHAR(100)";
+            case ColumnTypes.String255:
+                return "VARCHAR(255)";
+            case ColumnTypes.String512:
+                return "VARCHAR(512)";
+            case ColumnTypes.String1024:
+                return "VARCHAR(1024)";
+            case ColumnTypes.String8196:
+                return "VARCHAR(8196)";
+            case ColumnTypes.Text:
+                return "TEXT";
+            case ColumnTypes.MediumText:
+                return "TEXT";
+            case ColumnTypes.LongText:
+                return "TEXT";
+            case ColumnTypes.Blob:
                 return "BYTEA";
-                case ColumnTypes.LongBlob:
+            case ColumnTypes.LongBlob:
                 return "BYTEA";
-                case ColumnTypes.Date:
-                    return "DATE";
-                case ColumnTypes.DateTime:
-                    return "TIMESTAMP";
-                case ColumnTypes.Float:
-                    return "REAL";
-                case ColumnTypes.TinyInt1:
-                    return "TINYINT";
-                case ColumnTypes.TinyInt4:
-                    return "TINYINT";
-                case ColumnTypes.UTinyInt4:
-                    return "TINYINT"    // need to process unsigned // UNSIGNED";
-                case ColumnTypes.Binary32:
+            case ColumnTypes.Date:
+                return "DATE";
+            case ColumnTypes.DateTime:
+                return "TIMESTAMP";
+            case ColumnTypes.Float:
+                return "REAL";
+            case ColumnTypes.TinyInt1:
+                return "SMALLINT";
+            case ColumnTypes.TinyInt4:
+                return "INTEGER";
+            case ColumnTypes.UTinyInt4:
+                return "INTEGER";    // need to process unsigned // UNSIGNED";
+            case ColumnTypes.Binary32:
                 return "BYTEA";
-                case ColumnTypes.Binary64:
+            case ColumnTypes.Binary64:
                 return "BYTEA";
-                default:
-                    throw new DataManagerException("Unknown column type.");
+            default:
+                throw new DataManagerException ("Unknown column type.");
             }
         }
 
-        public override string GetColumnTypeStringSymbol(ColumnTypeDef coldef)
+        public override string GetColumnTypeStringSymbol (ColumnTypeDef coldef)
         {
             string symbol;
             switch (coldef.Type)
             {
-                case ColumnType.Blob:
-                    symbol = "BYTEA";
-                    break;
-                case ColumnType.LongBlob:
-                    symbol = "BYTEA";
-                    break;
-                case ColumnType.Boolean:
-                    symbol = "BOOL";
-                    break;
-                case ColumnType.Char:
-                    symbol = "CHAR(" + coldef.Size + ")";
-                    break;
-                case ColumnType.Date:
-                    symbol = "DATE";
-                    break;
-                case ColumnType.DateTime:
-                    symbol = "TIMESTAMP";
-                    break;
-                case ColumnType.Double:
-                    symbol = "DOUBLE PRECISION";
-                    break;
-                case ColumnType.Float:
-                    symbol = "REAL";
-                    break;
-                case ColumnType.Integer:
-                    symbol = "INT";  //  no size //(" + coldef.Size + ")"; //   Need to process for unsgned // + (coldef.unsigned ? " unsigned" : "");
-                    break;
-                case ColumnType.TinyInt:
-                    symbol = "TINYINT";     // no size //(" + coldef.Size + ")";    // need to process for unsigned // + (coldef.unsigned ? " unsigned" : "");
-                    break;
-                case ColumnType.String:
-                    symbol = "VARCHAR(" + coldef.Size + ")";
-                    break;
-                case ColumnType.Text:
-                    symbol = "TEXT";
-                    break;
-                case ColumnType.MediumText:
-                    symbol = "TEXT";
-                    break;
-                case ColumnType.LongText:
-                    symbol = "TEXT";
-                    break;
-                case ColumnType.UUID:
-                    symbol = "CHAR(36)";
-                    break;
-                case ColumnType.Binary:
-                    symbol = "BYTEA";       // no size //NARY(" + coldef.Size + ")";
-                    break;
-                default:
-                    throw new DataManagerException("Unknown column type.");
+            case ColumnType.Blob:
+                symbol = "BYTEA";
+                break;
+            case ColumnType.LongBlob:
+                symbol = "BYTEA";
+                break;
+            case ColumnType.Boolean:
+                symbol = "BOOL";
+                break;
+            case ColumnType.Char:
+                symbol = "CHAR(" + coldef.Size + ")";
+                break;
+            case ColumnType.Date:
+                symbol = "DATE";
+                break;
+            case ColumnType.DateTime:
+                symbol = "TIMESTAMP";
+                break;
+            case ColumnType.Double:
+                symbol = "DOUBLE PRECISION";
+                break;
+            case ColumnType.Float:
+                symbol = "REAL";
+                break;
+            case ColumnType.Integer:
+                symbol = "INT";  //  no size //(" + coldef.Size + ")"; //   Need to process for unsgned // + (coldef.unsigned ? " unsigned" : "");
+                break;
+            case ColumnType.TinyInt:
+                symbol = "SMALLINT";     // no size //(" + coldef.Size + ")";    // need to process for unsigned // + (coldef.unsigned ? " unsigned" : "");
+                break;
+            case ColumnType.String:
+                symbol = "VARCHAR(" + coldef.Size + ")";
+                break;
+            case ColumnType.Text:
+                symbol = "TEXT";
+                break;
+            case ColumnType.MediumText:
+                symbol = "TEXT";
+                break;
+            case ColumnType.LongText:
+                symbol = "TEXT";
+                break;
+            case ColumnType.UUID:
+                symbol = "CHAR(36)";
+                break;
+            case ColumnType.Binary:
+                symbol = "BYTEA";       // no size //NARY(" + coldef.Size + ")";
+                break;
+            default:
+                throw new DataManagerException ("Unknown column type.");
             }
 
             // special cases for autoimcrement fields
@@ -1022,190 +1042,230 @@ namespace WhiteCore.DataManager.PgSQL
                 symbol = "SERIAL";
 
             return symbol + (coldef.isNull ? " NULL" : " NOT NULL") +
-                   ((coldef.isNull && coldef.defaultValue == null)
+            ((coldef.isNull && coldef.defaultValue == null)
                         ? " DEFAULT NULL"
-                    : (coldef.defaultValue != null ? " DEFAULT '" + coldef.defaultValue.MySqlEscape() + "'" : "")); // +
+                    : (coldef.defaultValue != null ? " DEFAULT " + coldef.defaultValue.MySqlEscape () : "")); // +
 // see above                   ((coldef.Type == ColumnType.Integer || coldef.Type == ColumnType.TinyInt) && coldef.auto_increment
 //                        ? " AUTO_INCREMENT"
 //                        : "");
         }
 
-        public override void DropTable(string tableName)
+        public override void DropTable (string tableName)
         {
-            tableName = tableName.ToLower();
+            tableName = tableName.ToLower ();
             try
             {
-                ExecuteNonQuery(string.Format("drop table {0}", tableName), new Dictionary<string, object>());
-            }
-            catch (Exception e)
+                ExecuteNonQuery (string.Format ("drop table {0};", tableName), new Dictionary<string, object> ());
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] DropTable {0}", e.ToString());
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] DropTable {0}", e);
             }
         }
 
-        public override void ForceRenameTable(string oldTableName, string newTableName)
+        public override void ForceRenameTable (string oldTableName, string newTableName)
         {
-            newTableName = newTableName.ToLower();
+            newTableName = newTableName.ToLower ();
             try
             {
-                ExecuteNonQuery(string.Format("RENAME TABLE {0} TO {1}", oldTableName, newTableName),
-                                new Dictionary<string, object>());
-            }
-            catch (Exception e)
+                ExecuteNonQuery (string.Format ("RENAME TABLE {0} TO {1};", oldTableName, newTableName),
+                    new Dictionary<string, object> ());
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] ForceRenameTable {0}", e.ToString());
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ForceRenameTable {0}", e);
             }
         }
 
-        protected override void CopyAllDataBetweenMatchingTables(string sourceTableName, string destinationTableName,
+        protected override void CopyAllDataBetweenMatchingTables (string sourceTableName, string destinationTableName,
                                                                  ColumnDefinition[] columnDefinitions,
                                                                  IndexDefinition[] indexDefinitions)
         {
-            sourceTableName = sourceTableName.ToLower();
-            destinationTableName = destinationTableName.ToLower();
+            sourceTableName = sourceTableName.ToLower ();
+            destinationTableName = destinationTableName.ToLower ();
             try
             {
-                ExecuteNonQuery(
-                    string.Format("insert into {0} select * from {1}", destinationTableName, sourceTableName),
-                    new Dictionary<string, object>());
-            }
-            catch (Exception e)
+                ExecuteNonQuery (
+                    string.Format ("insert into {0} select * from {1};", destinationTableName, sourceTableName),
+                    new Dictionary<string, object> ());
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] CopyAllDataBetweenMatchingTables", e.ToString());
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] CopyAllDataBetweenMatchingTables {0}", e);
             }
         }
 
-        public override bool TableExists(string table)
+        public override bool TableExists (string table)
         {
-            IDataReader reader = null;
-            List<string> retVal = new List<string>();
+       
+//            var qry = string.Format ("SELECT EXISTS( SELECT * FROM information_schema.tables WHERE table_schema = '{0}' AND table_name = '{1}')",
+            var qry = string.Format ("SELECT * FROM information_schema.tables WHERE table_schema = '{0}' AND table_name = '{1}';",
+                "whitecore", table);
+
+            //var ret = ExecuteNonQuery (qry, new Dictionary<string, object> ());
+            // returns -1 if table does not exist
+
+
+            IDataReader reader;
+            var retVal = new List<string> ();
+            //bool retVal = false;
             try
             {
-                using (reader = Query("show tables", new Dictionary<string, object>()))
+              
+                reader = Query (qry);
                 {
-                    while (reader.Read())
+            //        reader.Read();
+            //        retVal = (reader.FieldCount > 1);
+                    while (reader.Read ())
                     {
                         for (int i = 0; i < reader.FieldCount; i++)
                         {
-                            retVal.Add(reader.GetString(i).ToLower());
+//                            retVal = (reader.RecordsAffected > 0);
+                            retVal.Add (reader [i].ToString ().ToLower ());
                         }
+
                     }
+
                 }
-            }
-            catch (Exception e)
+                if (reader != null)
+                    reader.Close ();
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] TableExists: {0}", e.ToString());
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] TableExists: {0}", e);
             }
-            return retVal.Contains(table.ToLower());
+
+            // tidy up
+
+            return retVal.Contains (table.ToLower ());
+            //return retVal;
         }
 
-        protected override List<ColumnDefinition> ExtractColumnsFromTable(string tableName)
+        internal string ConvertPgTypeToColumnDef(string PGFieldType)
         {
-            var defs = new List<ColumnDefinition>();
-            tableName = tableName.ToLower();
+            // convert expanded type definitions to standard column types
+            if (PGFieldType == "character varying")
+                return "varchar";
+
+            if (PGFieldType == "character")
+                return "char";
+
+            if (PGFieldType == "bpchar")
+                return "char";
+
+            if (PGFieldType == "double precision")
+                return "double";
+
+            // all the rest are correct
+            return PGFieldType;
+        }
+
+        protected override List<ColumnDefinition> ExtractColumnsFromTable (string tableName)
+        {
+            var defs = new List<ColumnDefinition> ();
+            tableName = tableName.ToLower ();
             IDataReader rdr = null;
             try
             {
-                rdr = Query(string.Format("desc {0}", tableName), new Dictionary<string, object>());
-                while (rdr.Read())
-                {
-                    var name = rdr["Field"];
-                    //var pk = rdr["Key"];
-                    var type = rdr["Type"];
-                    //var extra = rdr["Extra"];
-                    object defaultValue = rdr["Default"];
+                var qry = string.Format ("select column_name,data_type,column_default from information_schema.columns where table_name='{0}';",tableName);
 
-                    ColumnTypeDef typeDef = ConvertTypeToColumnType(type.ToString());
-                    typeDef.isNull = rdr["Null"].ToString() == "YES";
-                    typeDef.auto_increment = rdr["Extra"].ToString().IndexOf("auto_increment") >= 0;
-                    typeDef.defaultValue = defaultValue.GetType() == typeof (System.DBNull)
-                                               ? null
-                                               : defaultValue.ToString();
-                    defs.Add(new ColumnDefinition
-                                 {
-                                     Name = name.ToString(),
-                                     Type = typeDef,
-                                 });
+                //rdr = Query (string.Format ("desc {0}", tableName), new Dictionary<string, object> ());
+                rdr = Query (qry);
+                while (rdr.Read ())
+                {
+
+                    var name = rdr ["column_name"];
+                    //var pk = rdr["Key"];
+                    var type = rdr ["data_type"];
+                    //var extra = rdr["Extra"];
+                    object defaultValue = rdr ["column_default"];
+
+                    var pgType = ConvertPgTypeToColumnDef(type.ToString());
+                    ColumnTypeDef typeDef = ConvertTypeToColumnType (pgType);
+                    //ColumnTypeDef typeDef = ConvertTypeToColumnType (type.ToString ());
+
+                    typeDef.isNull = rdr ["Null"].ToString () == "YES";
+                    typeDef.auto_increment = rdr ["Serial"].ToString () == "YES";
+                    typeDef.defaultValue = defaultValue is DBNull
+                        ? null
+                        : defaultValue.ToString ();
+                    
+                    defs.Add (new ColumnDefinition {
+                        Name = name.ToString (),
+                        Type = typeDef,
+                    });
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e.ToString());
-            }
-            finally
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e);
+            } finally
+
             {
                 try
                 {
                     if (rdr != null)
                     {
-                        rdr.Close();
+                        rdr.Close ();
                         //rdr.Dispose ();
                     }
-                }
-                catch (Exception e)
+                } catch (Exception e)
                 {
-                    MainConsole.Instance.DebugFormat("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e.ToString());
+                    MainConsole.Instance.DebugFormat ("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e);
                 }
             }
             return defs;
         }
 
-        protected override Dictionary<string, IndexDefinition> ExtractIndicesFromTable(string tableName)
+        protected override Dictionary<string, IndexDefinition> ExtractIndicesFromTable (string tableName)
         {
-            Dictionary<string, IndexDefinition> defs = new Dictionary<string, IndexDefinition>();
-            tableName = tableName.ToLower();
+            var defs = new Dictionary<string, IndexDefinition> ();
             IDataReader rdr = null;
-            Dictionary<string, Dictionary<uint, string>> indexLookup =
-                new Dictionary<string, Dictionary<uint, string>>();
-            Dictionary<string, bool> indexIsUnique = new Dictionary<string, bool>();
+            var indexLookup = new Dictionary<string, Dictionary<uint, string>> ();
+            var indexIsUnique = new Dictionary<string, bool> ();
+
+            tableName = tableName.ToLower ();
 
             try
             {
-                rdr = Query(string.Format("SHOW INDEX IN {0}", tableName), new Dictionary<string, object>());
-                while (rdr.Read())
+                var qry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
+//                rdr = Query (string.Format ("SHOW INDEX IN {0}", tableName), new Dictionary<string, object> ());
+                rdr = Query (qry);
+                while (rdr.Read ())
                 {
-                    string name = rdr["Column_name"].ToString();
-                    bool unique = uint.Parse(rdr["Non_unique"].ToString()) == 0;
-                    string index = rdr["Key_name"].ToString();
-                    uint sequence = uint.Parse(rdr["Seq_in_index"].ToString());
-                    if (indexLookup.ContainsKey(index) == false)
+                    string name = rdr ["Column_name"].ToString ();
+                    bool unique = uint.Parse (rdr ["Non_unique"].ToString ()) == 0;
+                    string index = rdr ["Key_name"].ToString ();
+                    uint sequence = uint.Parse (rdr ["Seq_in_index"].ToString ());
+                    if (!indexLookup.ContainsKey (index))
                     {
-                        indexLookup[index] = new Dictionary<uint, string>();
+                        indexLookup [index] = new Dictionary<uint, string> ();
                     }
-                    indexIsUnique[index] = unique;
-                    indexLookup[index][sequence - 1] = name;
+                    indexIsUnique [index] = unique;
+                    indexLookup [index] [sequence - 1] = name;
                 }
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
-                MainConsole.Instance.ErrorFormat("[PgSQLDataLoader] ExtractIndicesFromTable: {1}", e.ToString());
-            }
-            finally
+                MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ExtractIndicesFromTable: {0}", e);
+            } finally
             {
                 try
                 {
                     if (rdr != null)
                     {
-                        rdr.Close();
+                        rdr.Close ();
                     }
-                }
-                catch (Exception e)
+                } catch (Exception e)
                 {
-                    MainConsole.Instance.DebugFormat("[PgSQLDataLoader] ExtractIndicesFromTable: {0}", e.ToString());
+                    MainConsole.Instance.DebugFormat ("[PgSQLDataLoader] ExtractIndicesFromTable: {0}", e);
                 }
             }
 
             foreach (KeyValuePair<string, Dictionary<uint, string>> index in indexLookup)
             {
-                index.Value.OrderBy(x => x.Key);
-                defs[index.Key] = new IndexDefinition
-                                      {
-                                          Fields = index.Value.Values.ToArray<string>(),
-                                          Type =
-                                              (indexIsUnique[index.Key]
+                index.Value.OrderBy (x => x.Key);
+                defs [index.Key] = new IndexDefinition {
+                    Fields = index.Value.Values.ToArray<string> (),
+                    Type =
+                                              (indexIsUnique [index.Key]
                                                    ? (index.Key == "PRIMARY" ? IndexType.Primary : IndexType.Unique)
                                                    : IndexType.Index)
-                                      };
+                };
             }
 
             return defs;
@@ -1213,9 +1273,9 @@ namespace WhiteCore.DataManager.PgSQL
 
         #endregion
 
-        public override IGenericData Copy()
+        public override IGenericData Copy ()
         {
-            return new PgSQLDataLoader();
+            return new PgSQLDataLoader ();
         }
     }
 }

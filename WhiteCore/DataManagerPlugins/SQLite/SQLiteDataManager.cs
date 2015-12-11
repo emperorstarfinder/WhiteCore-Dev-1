@@ -25,11 +25,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using WhiteCore.DataManager.Migration;
-using WhiteCore.Framework.ConsoleFramework;
-using WhiteCore.Framework.Services;
-using WhiteCore.Framework.Utilities;
-using OpenMetaverse;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -37,6 +32,11 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Community.CsharpSqlite.SQLiteClient;
+using OpenMetaverse;
+using WhiteCore.DataManager.Migration;
+using WhiteCore.Framework.ConsoleFramework;
+using WhiteCore.Framework.Services;
+using WhiteCore.Framework.Utilities;
 
 namespace WhiteCore.DataManager.SQLite
 {
@@ -129,23 +129,20 @@ namespace WhiteCore.DataManager.SQLite
             {
                 if (retries++ > 5)
                     MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                            cmd.CommandText,
-                                            ex.ToString());
+                                            cmd.CommandText, ex);
                 else
                     goto restart;
             }
             catch (SqliteException ex)
             {
                 MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                        cmd.CommandText,
-                                        ex.ToString());
+                                        cmd.CommandText, ex);
                 //throw ex;
             }
             catch (Exception ex)
             {
                 MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                        cmd.CommandText,
-                                        ex.ToString());
+                                        cmd.CommandText, ex);
                 throw ex;
             }
         }
@@ -190,8 +187,7 @@ namespace WhiteCore.DataManager.SQLite
             {
                 if (retries++ > 5)
                     MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                            cmd.CommandText,
-                                            ex.ToString());
+                                            cmd.CommandText, ex);
                 else
                     goto restart;
                 return 0;
@@ -199,20 +195,18 @@ namespace WhiteCore.DataManager.SQLite
             catch (SqliteException ex)
             {
                 MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                        cmd.CommandText,
-                                        ex.ToString());
+                                        cmd.CommandText, ex);
             }
             catch (Exception ex)
             {
                 MainConsole.Instance.WarnFormat("[SqliteDataManager]: Exception processing command: {0}, Exception: {1}",
-                                        cmd.CommandText,
-                                        ex.ToString());
+                                        cmd.CommandText, ex);
                 throw ex;
             }
             return 0;
         }
 
-        private static void UnescapeSql(SqliteCommand cmd)
+        static void UnescapeSql(SqliteCommand cmd)
         {
             foreach (SqliteParameter v in cmd.Parameters)
             {
@@ -238,18 +232,18 @@ namespace WhiteCore.DataManager.SQLite
             //cmd.Dispose ();
         }
 
-        private void AddParams(ref SqliteCommand cmd, Dictionary<string, object> ps)
+        void AddParams(ref SqliteCommand cmd, Dictionary<string, object> ps)
         {
             foreach (KeyValuePair<string, object> p in ps)
                 AddParam(ref cmd, p.Key, p.Value);
         }
 
-        private void AddParam(ref SqliteCommand cmd, string key, object value)
+        void AddParam(ref SqliteCommand cmd, string key, object value)
         {
             AddParam(ref cmd, key, value, false);
         }
 
-        private void AddParam(ref SqliteCommand cmd, string key, object value, bool convertByteString)
+        void AddParam(ref SqliteCommand cmd, string key, object value, bool convertByteString)
         {
             if (value is UUID)
                 cmd.Parameters.Add(key, value.ToString());
@@ -277,7 +271,7 @@ namespace WhiteCore.DataManager.SQLite
             return QueryFullData2(query);
         }
 
-        private List<string> QueryFullData2(string query)
+        List<string> QueryFullData2(string query)
         {
             var cmd = PrepReader(query);
             lock (GetLock())
@@ -319,7 +313,7 @@ namespace WhiteCore.DataManager.SQLite
             return new DataReaderConnection {DataReader = data, Connection = conn};
         }
 
-        private IDataReader QueryData2(string query, out SqliteConnection conn)
+        IDataReader QueryData2(string query, out SqliteConnection conn)
         {
             lock (GetLock())
             {
@@ -344,7 +338,7 @@ namespace WhiteCore.DataManager.SQLite
             return Query2(query, queryFilter, sort, start, count);
         }
 
-        private List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
+        List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
                                     uint? count)
         {
             Dictionary<string, object> ps = new Dictionary<string, object>();
@@ -367,10 +361,10 @@ namespace WhiteCore.DataManager.SQLite
 
             if (start.HasValue)
             {
-                query += " LIMIT " + start.Value.ToString();
+                query += " LIMIT " + start.Value;
                 if (count.HasValue)
                 {
-                    query += ", " + count.Value.ToString();
+                    query += ", " + count.Value;
                 }
             }
 
@@ -413,7 +407,7 @@ namespace WhiteCore.DataManager.SQLite
             return QueryNames2(keyRow, keyValue, query);
         }
 
-        private Dictionary<string, List<string>> QueryNames2(string[] keyRow, object[] keyValue, string query)
+        Dictionary<string, List<string>> QueryNames2(string[] keyRow, object[] keyValue, string query)
         {
             Dictionary<string, object> ps = new Dictionary<string, object>();
             int i = 0;
@@ -453,7 +447,7 @@ namespace WhiteCore.DataManager.SQLite
             }
         }
 
-        private void AddValueToList(ref Dictionary<string, List<string>> dic, string key, string value)
+        void AddValueToList(ref Dictionary<string, List<string>> dic, string key, string value)
         {
             if (!dic.ContainsKey(key))
                 dic.Add(key, new List<string>());
@@ -508,10 +502,10 @@ namespace WhiteCore.DataManager.SQLite
 
             if (start.HasValue)
             {
-                query += " LIMIT " + start.Value.ToString();
+                query += " LIMIT " + start.Value;
                 if (count.HasValue)
                 {
-                    query += ", " + count.Value.ToString();
+                    query += ", " + count.Value;
                 }
             }
 
@@ -562,8 +556,7 @@ namespace WhiteCore.DataManager.SQLite
         {
             var cmd = new SqliteCommand();
 
-            string query = "";
-            query = String.Format("insert into {0} values(", table);
+            string query = String.Format("insert into {0} values(", table);
             int a = 0;
             foreach (object value in values)
             {
@@ -578,7 +571,7 @@ namespace WhiteCore.DataManager.SQLite
             return true;
         }
 
-        private bool InsertOrReplace(string table, Dictionary<string, object> row, bool insert)
+        bool InsertOrReplace(string table, Dictionary<string, object> row, bool insert)
         {
             SqliteCommand cmd = new SqliteCommand();
             string query = (insert ? "INSERT" : "REPLACE") + " INTO " + table + " (" +
@@ -615,8 +608,7 @@ namespace WhiteCore.DataManager.SQLite
             var cmd = new SqliteCommand();
             Dictionary<string, object> ps = new Dictionary<string, object>();
 
-            string query = "";
-            query = String.Format("insert into {0} values (", table);
+            string query = String.Format("insert into {0} values (", table);
             int i = 0;
             foreach (object value in values)
             {
@@ -735,11 +727,9 @@ namespace WhiteCore.DataManager.SQLite
                             CloseReaderCommand(cmd);
                             return true;
                         }
-                        else
-                        {
-                            CloseReaderCommand(cmd);
-                            return false;
-                        }
+
+                        CloseReaderCommand(cmd);
+                        return false;
                     }
                 }
                 catch
@@ -928,7 +918,7 @@ namespace WhiteCore.DataManager.SQLite
 
                     i++;
                     newTableColumnDefinition.Add("CREATE " + (index.Type == IndexType.Unique ? "UNIQUE " : string.Empty) +
-                                                 "INDEX idx_" + table + "_" + i.ToString() + " ON " + table + "(" +
+                                                 "INDEX idx_" + table + "_" + i + " ON " + table + "(" +
                                                  string.Join(", ", index.Fields) + ")");
                 }
                 foreach (string query in newTableColumnDefinition)
@@ -1179,15 +1169,14 @@ namespace WhiteCore.DataManager.SQLite
 
                             ColumnTypeDef typeDef = ConvertTypeToColumnType(type.ToString());
                             typeDef.isNull = uint.Parse(rdr["notnull"].ToString()) == 0;
-                            typeDef.defaultValue = defaultValue == null ||
-                                                   defaultValue.GetType() == typeof (System.DBNull)
+                            typeDef.defaultValue = defaultValue == null || defaultValue is DBNull
                                                        ? null
                                                        : defaultValue.ToString();
 
                             if (
                                 uint.Parse(rdr["pk"].ToString()) == 1 &&
                                 primary != null &&
-                                isFaux == true &&
+                                isFaux &&
                                 primary.Fields.Length == 1 &&
                                 primary.Fields[0].ToLower() == name.ToString().ToLower() &&
                                 (typeDef.Type == ColumnType.Integer || typeDef.Type == ColumnType.TinyInt)
@@ -1309,7 +1298,7 @@ namespace WhiteCore.DataManager.SQLite
                 }
             }
 
-            if (checkForPrimary == true && autoIncrementField != null)
+            if (checkForPrimary && autoIncrementField != null)
             {
                 primary = new IndexDefinition
                               {
