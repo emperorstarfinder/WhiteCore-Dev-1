@@ -44,9 +44,9 @@ namespace WhiteCore.Services.DataService
         string ConnectionString = "";
         string StorageProvider = "";
 
-        public void Initialise(IConfigSource source, IRegistryCore simBase)
+        public void Initialise(IConfigSource config, IRegistryCore registry)
         {
-            IConfig m_config = source.Configs["WhiteCoreData"];
+            IConfig m_config = config.Configs["WhiteCoreData"];
             if (m_config != null)
             {
                 StorageProvider = m_config.GetString("StorageProvider", StorageProvider);
@@ -86,6 +86,10 @@ namespace WhiteCore.Services.DataService
             {
                 SQLiteLoader GenericData = new SQLiteLoader();
 
+                // set default data directory in case it is needed
+                var simBase = registry.RequestModuleInterface<ISimulationBase> ();
+                GenericData.DefaultDataPath = simBase.DefaultDataPath;
+
                 DataConnector = GenericData;
             }
 
@@ -94,7 +98,7 @@ namespace WhiteCore.Services.DataService
             {
                 try
                 {
-                    plugin.Initialize(DataConnector == null ? null : DataConnector.Copy(), source, simBase,
+                    plugin.Initialize(DataConnector == null ? null : DataConnector.Copy(), config, registry,
                                       ConnectionString);
                 }
                 catch (Exception ex)
@@ -106,9 +110,9 @@ namespace WhiteCore.Services.DataService
             }
         }
 
-        public void Initialise(IConfigSource source, IRegistryCore simBase, List<Type> types)
+        public void Initialise(IConfigSource config, IRegistryCore registry, List<Type> types)
         {
-            IConfig m_config = source.Configs["WhiteCoreData"];
+            IConfig m_config = config.Configs["WhiteCoreData"];
             if (m_config != null)
             {
                 StorageProvider = m_config.GetString("StorageProvider", StorageProvider);
@@ -147,6 +151,10 @@ namespace WhiteCore.Services.DataService
             {
                 SQLiteLoader GenericData = new SQLiteLoader();
 
+                // set default data directory in case it is needed
+                var simBase = registry.RequestModuleInterface<ISimulationBase> ();
+                GenericData.DefaultDataPath = simBase.DefaultDataPath;
+
                 DataConnector = GenericData;
             }
 
@@ -157,7 +165,7 @@ namespace WhiteCore.Services.DataService
                 {
                     try
                     {
-                        plugin.Initialize(DataConnector.Copy(), source, simBase, ConnectionString);
+                        plugin.Initialize(DataConnector.Copy(), config, registry, ConnectionString);
                     }
                     catch (Exception ex)
                     {

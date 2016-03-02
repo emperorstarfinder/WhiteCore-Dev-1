@@ -42,24 +42,30 @@ namespace WhiteCore.DataManager.SQLite
 {
     public class SQLiteLoader : DataManagerBase
     {
+        string m_defaultDataPath = Constants.DEFAULT_DATA_DIR+"/SQLite";  
         protected Dictionary<string, FieldInfo> m_Fields = new Dictionary<string, FieldInfo>();
-        protected string _connectionString;
+        protected string m_connectionString;
         protected static Dictionary<string, object> _locks = new Dictionary<string, object>();
-        protected string _fileName;
+        protected string m_fileName;
 
         protected object GetLock()
         {
             lock (_locks)
             {
-                if (!_locks.ContainsKey(_fileName))
-                    _locks.Add(_fileName, new object());
-                return _locks[_fileName];
+                if (!_locks.ContainsKey(m_fileName))
+                    _locks.Add(m_fileName, new object());
+                return _locks[m_fileName];
             }
         }
 
         public override string Identifier
         {
             get { return "SQLiteConnector"; }
+        }
+
+        public string DefaultDataPath
+        {
+            set { m_defaultDataPath = value + "/SQLite"; }
         }
 
         #region Database
@@ -69,29 +75,30 @@ namespace WhiteCore.DataManager.SQLite
         
             // connection string in the format...
             // Data Source=File:<db_filename>
-            _connectionString = connectionString;
-            string[] s1 = _connectionString.Split(new[] {"Data Source=", ";", ","}, StringSplitOptions.RemoveEmptyEntries);
+            m_connectionString = connectionString;
+            string[] s1 = m_connectionString.Split(new[] {"Data Source=", ";", ","}, StringSplitOptions.RemoveEmptyEntries);
 
             // first element should be file:<db_filename>
             s1[0] = s1[0].Remove(0, 5);
-            _fileName = s1 [0];
+            m_fileName = s1 [0];
 
             // some sanity checks
             string filePath = Path.GetDirectoryName (s1[0]);
             string fileName = Path.GetFileName (s1[0]);
 
-            if (filePath == "") //Only add this if we aren't an absolute path already
+            if (filePath == "") //Only add this if we aren't an absolute path already eg file:data.db
             {
-                filePath = Util.BasePathCombine ("");
-                _connectionString = string.Format ("Data Source=file://{0}", Path.Combine (Util.BasePathCombine (""), fileName));
+                m_connectionString = string.Format ("Data Source=file://{0}", Path.Combine (m_defaultDataPath, fileName));
+                filePath = m_defaultDataPath;
+                m_fileName = Path.Combine (m_defaultDataPath, fileName);
             }
 
             if (!Directory.Exists (filePath))
                 Directory.CreateDirectory (filePath);           // directory does not exist!
-            if (!File.Exists(_fileName))
-                File.Create(_fileName).Dispose();               // database file does not exist, create an empty one to use     
+            if (!File.Exists(m_fileName))
+                File.Create(m_fileName).Dispose();              // database file does not exist, create an empty one to use     
 
-            SqliteConnection connection = new SqliteConnection(_connectionString);
+            SqliteConnection connection = new SqliteConnection(m_connectionString);
 
             connection.Open ();
             var migrationManager = new MigrationManager(this, migratorName, validateTables);
@@ -100,14 +107,14 @@ namespace WhiteCore.DataManager.SQLite
             connection.Close();
         }
 
-        public override void CloseDatabase(DataReaderConnection conn)
+        public override void CloseDatabase(DataReaderConnection connection)
         {
-            if (conn == null)
+            if (connection == null)
                 return;
-            if (conn.DataReader != null)
-                conn.DataReader.Close();
-            if (conn != null && conn.Connection != null && conn.Connection is SqliteConnection)
-                ((SqliteConnection) conn.Connection).Close();
+            if (connection.DataReader != null)
+                connection.DataReader.Close();
+            if (connection != null && connection.Connection != null && connection.Connection is SqliteConnection)
+                ((SqliteConnection) connection.Connection).Close();
         }
 
         #endregion
@@ -120,7 +127,7 @@ namespace WhiteCore.DataManager.SQLite
             restart:
             try
             {
-                SqliteConnection connection = new SqliteConnection(_connectionString);
+                SqliteConnection connection = new SqliteConnection(m_connectionString);
                 connection.Open();
                 cmd.Connection = connection;
             }
@@ -151,7 +158,7 @@ namespace WhiteCore.DataManager.SQLite
         {
             try
             {
-                SqliteConnection connection = new SqliteConnection(_connectionString);
+                SqliteConnection connection = new SqliteConnection(m_connectionString);
                 connection.Open();
                 var cmd = connection.CreateCommand();
                 cmd.CommandText = query;
@@ -211,17 +218,14 @@ namespace WhiteCore.DataManager.SQLite
             foreach (SqliteParameter v in cmd.Parameters)
             {
                 if (v.Value == null)
-                {
                     v.Value = "";
-                }
+                
                 if (v.Value.ToString().Contains("\\'"))
-                {
                     v.Value = v.Value.ToString().Replace("\\'", "\'");
-                }
+                
                 if (v.Value.ToString().Contains("\\\""))
-                {
                     v.Value = v.Value.ToString().Replace("\\\"", "\"");
-                }
+               
             }
         }
 
@@ -338,11 +342,16 @@ namespace WhiteCore.DataManager.SQLite
             return Query2(query, queryFilter, sort, start, count);
         }
 
+<<<<<<< HEAD
         List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
                                     uint? count)
+=======
+        List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, 
+                            uint? start, uint? count)
+>>>>>>> develop
         {
             Dictionary<string, object> ps = new Dictionary<string, object>();
-            List<string> parts = new List<string>();
+            List<string> parts;
 
             if (queryFilter != null && queryFilter.Count > 0)
             {
@@ -368,8 +377,7 @@ namespace WhiteCore.DataManager.SQLite
                 }
             }
 
-            int i = 0;
-
+            int i;
             var cmd = PrepReader(query);
             AddParams(ref cmd, ps);
             lock (GetLock())
@@ -460,10 +468,10 @@ namespace WhiteCore.DataManager.SQLite
         #region Update
 
         public override bool Update(string table, Dictionary<string, object> values,
-                                    Dictionary<string, int> incrementValues, QueryFilter queryFilter, uint? start,
-                                    uint? count)
+                                    Dictionary<string, int> incrementValue, QueryFilter queryFilter,
+                                    uint? start, uint? count)
         {
-            if ((values == null || values.Count < 1) && (incrementValues == null || incrementValues.Count < 1))
+            if ((values == null || values.Count < 1) && (incrementValue == null || incrementValue.Count < 1))
             {
                 MainConsole.Instance.Warn("Update attempted with no values");
                 return false;
@@ -488,9 +496,9 @@ namespace WhiteCore.DataManager.SQLite
                     parts.Add(string.Format("{0} = {1}", value.Key, key));
                 }
             }
-            if (incrementValues != null)
+            if (incrementValue != null)
             {
-                foreach (KeyValuePair<string, int> value in incrementValues)
+                foreach (KeyValuePair<string, int> value in incrementValue)
                 {
                     string key = ":updateSet_increment_" + value.Key.Replace("`", "");
                     ps[key] = value.Value;
@@ -556,7 +564,12 @@ namespace WhiteCore.DataManager.SQLite
         {
             var cmd = new SqliteCommand();
 
+<<<<<<< HEAD
             string query = String.Format("insert into {0} values(", table);
+=======
+            string query;
+            query = String.Format("insert into {0} values(", table);
+>>>>>>> develop
             int a = 0;
             foreach (object value in values)
             {
@@ -608,7 +621,12 @@ namespace WhiteCore.DataManager.SQLite
             var cmd = new SqliteCommand();
             Dictionary<string, object> ps = new Dictionary<string, object>();
 
+<<<<<<< HEAD
             string query = String.Format("insert into {0} values (", table);
+=======
+            string query;
+            query = String.Format("insert into {0} values (", table);
+>>>>>>> develop
             int i = 0;
             foreach (object value in values)
             {
@@ -638,14 +656,14 @@ namespace WhiteCore.DataManager.SQLite
 
         public override bool InsertSelect(string tableA, string[] fieldsA, string tableB, string[] valuesB)
         {
-            SqliteCommand cmd = PrepReader(string.Format("INSERT INTO {0}{1} SELECT {2} FROM {3}",
-                                                         tableA,
-                                                         (fieldsA.Length > 0
-                                                              ? " (" + string.Join(", ", fieldsA) + ")"
-                                                              : ""),
-                                                         string.Join(", ", valuesB),
-                                                         tableB
-                                               ));
+            SqliteCommand cmd = PrepReader(
+                string.Format(
+                    "INSERT INTO {0}{1} SELECT {2} FROM {3}",
+                    tableA,
+                    (fieldsA.Length > 0 ? " (" + string.Join(", ", fieldsA) + ")" : ""),
+                    string.Join(", ", valuesB),
+                    tableB
+                ));
 
             try
             {
@@ -712,10 +730,10 @@ namespace WhiteCore.DataManager.SQLite
 
         #region Tables
 
-        public override bool TableExists(string tableName)
+        public override bool TableExists(string table)
         {
             // NOTE: SQLite ExecuteReader barfs if the database file(s) do not exists
-            var cmd = PrepReader("SELECT name FROM Sqlite_master WHERE name='" + tableName + "'");
+            var cmd = PrepReader("SELECT name FROM Sqlite_master WHERE name='" + table + "'");
             lock (GetLock())
             {
                 try
@@ -730,6 +748,10 @@ namespace WhiteCore.DataManager.SQLite
 
                         CloseReaderCommand(cmd);
                         return false;
+<<<<<<< HEAD
+=======
+
+>>>>>>> develop
                     }
                 }
                 catch
@@ -739,7 +761,7 @@ namespace WhiteCore.DataManager.SQLite
             }
         }
 
-        public override void CreateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indices)
+        public override void CreateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indexDefinitions)
         {
             if (TableExists(table))
             {
@@ -747,7 +769,7 @@ namespace WhiteCore.DataManager.SQLite
             }
 
             IndexDefinition primary = null;
-            foreach (IndexDefinition index in indices)
+            foreach (IndexDefinition index in indexDefinitions)
             {
                 if (index.Type == IndexType.Primary)
                 {
@@ -761,10 +783,7 @@ namespace WhiteCore.DataManager.SQLite
             bool has_auto_increment = false;
             foreach (ColumnDefinition column in columns)
             {
-                if (column.Type.auto_increment)
-                {
-                    has_auto_increment = true;
-                }
+                has_auto_increment |= column.Type.auto_increment;
                 columnDefinition.Add(column.Name + " " + GetColumnTypeStringSymbol(column.Type));
             }
             if (!has_auto_increment && primary != null && primary.Fields.Length > 0)
@@ -772,21 +791,21 @@ namespace WhiteCore.DataManager.SQLite
                 columnDefinition.Add("PRIMARY KEY (" + string.Join(", ", primary.Fields) + ")");
             }
 
-            var cmd = new SqliteCommand
-                          {
-                              CommandText =
-                                  string.Format("create table " + table + " ({0})",
-                                                string.Join(", ", columnDefinition.ToArray()))
-                          };
+            var cmd = new SqliteCommand 
+                            {
+                                CommandText = 
+                                    string.Format ("create table " + table + " ({0})",
+                                    string.Join (", ", columnDefinition.ToArray ()))
+                            };
             ExecuteNonQuery(cmd);
             CloseReaderCommand(cmd);
 
-            if (indices.Length >= 1 && (primary == null || indices.Length >= 2))
+            if (indexDefinitions.Length >= 1 && (primary == null || indexDefinitions.Length >= 2))
             {
-                columnDefinition = new List<string>(primary != null ? indices.Length : indices.Length - 1);
+                columnDefinition = new List<string>(primary != null ? indexDefinitions.Length : indexDefinitions.Length - 1);
                     // reusing existing variable for laziness
                 uint i = 0;
-                foreach (IndexDefinition index in indices)
+                foreach (IndexDefinition index in indexDefinitions)
                 {
                     if (index.Type == IndexType.Primary || index.Fields.Length < 1)
                     {
@@ -795,7 +814,7 @@ namespace WhiteCore.DataManager.SQLite
 
                     i++;
                     columnDefinition.Add("CREATE " + (index.Type == IndexType.Unique ? "UNIQUE " : string.Empty) +
-                                         "INDEX idx_" + table + "_" + i.ToString() + " ON " + table + "(" +
+                                         "INDEX idx_" + table + "_" + i + " ON " + table + "(" +
                                          string.Join(", ", index.Fields) + ")");
                 }
                 foreach (string query in columnDefinition)
@@ -810,7 +829,7 @@ namespace WhiteCore.DataManager.SQLite
             }
         }
 
-        public override void UpdateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indices,
+        public override void UpdateTable(string table, ColumnDefinition[] columns, IndexDefinition[] indexDefinitions,
                                          Dictionary<string, string> renameColumns)
         {
             if (!TableExists(table))
@@ -872,7 +891,7 @@ namespace WhiteCore.DataManager.SQLite
             List<string> newTableColumnDefinition = new List<string>(columns.Length);
 
             IndexDefinition primary = null;
-            foreach (IndexDefinition index in indices)
+            foreach (IndexDefinition index in indexDefinitions)
             {
                 if (index.Type == IndexType.Primary)
                 {
@@ -884,10 +903,7 @@ namespace WhiteCore.DataManager.SQLite
             bool has_auto_increment = false;
             foreach (ColumnDefinition column in columns)
             {
-                if (column.Type.auto_increment)
-                {
-                    has_auto_increment = true;
-                }
+                has_auto_increment |= column.Type.auto_increment;
                 newTableColumnDefinition.Add(column.Name + " " + GetColumnTypeStringSymbol(column.Type));
             }
             if (!has_auto_increment && primary != null && primary.Fields.Length > 0)
@@ -904,12 +920,12 @@ namespace WhiteCore.DataManager.SQLite
             ExecuteNonQuery(cmd);
             CloseReaderCommand(cmd);
 
-            if (indices.Length >= 1 && (primary == null || indices.Length >= 2))
+            if (indexDefinitions.Length >= 1 && (primary == null || indexDefinitions.Length >= 2))
             {
-                newTableColumnDefinition = new List<string>(primary != null ? indices.Length : indices.Length - 1);
+                newTableColumnDefinition = new List<string>(primary != null ? indexDefinitions.Length : indexDefinitions.Length - 1);
                     // reusing existing variable for laziness
                 uint i = 0;
-                foreach (IndexDefinition index in indices)
+                foreach (IndexDefinition index in indexDefinitions)
                 {
                     if (index.Type == IndexType.Primary || index.Fields.Length < 1)
                     {
@@ -939,17 +955,16 @@ namespace WhiteCore.DataManager.SQLite
             foreach (ColumnDefinition column in sameColumns.Values)
             {
                 if (InsertFromTempTableColumnDefinition != string.Empty)
-                {
                     InsertFromTempTableColumnDefinition += ", ";
-                }
+               
                 if (InsertIntoFromTempTableColumnDefinition != string.Empty)
-                {
                     InsertIntoFromTempTableColumnDefinition += ", ";
-                }
+              
                 if (renameColumns.ContainsKey(column.Name))
                     InsertIntoFromTempTableColumnDefinition += renameColumns[column.Name];
                 else
                     InsertIntoFromTempTableColumnDefinition += column.Name;
+                
                 InsertFromTempTableColumnDefinition += column.Name;
             }
 
@@ -1298,7 +1313,11 @@ namespace WhiteCore.DataManager.SQLite
                 }
             }
 
+<<<<<<< HEAD
             if (checkForPrimary && autoIncrementField != null)
+=======
+            if (checkForPrimary && (autoIncrementField != null))
+>>>>>>> develop
             {
                 primary = new IndexDefinition
                               {
@@ -1350,7 +1369,10 @@ namespace WhiteCore.DataManager.SQLite
 
         public override IGenericData Copy()
         {
-            return new SQLiteLoader();
+            var SQLiteLoaderCopy = new SQLiteLoader();
+            SQLiteLoaderCopy.m_defaultDataPath = m_defaultDataPath;
+
+            return SQLiteLoaderCopy;
         }
     }
 }
