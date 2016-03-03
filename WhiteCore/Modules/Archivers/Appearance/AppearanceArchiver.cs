@@ -75,16 +75,36 @@ namespace WhiteCore.Modules.Archivers
                 return null;
             }
 
-            // need to be smart here...
-            fileName = PathHelpers.VerifyReadFile (fileName, ".aa", m_storeDirectory);
-            if (!File.Exists(fileName))
+            string archiveXML = "";
+            if (fileName.EndsWith(".database"))
             {
-                MainConsole.Instance.Error("[AvatarArchive]: Unable to load from file: file does not exist!");
-                return null;
+                IAvatarArchiverConnector archiver = DataManager.DataManager.RequestPlugin<IAvatarArchiverConnector>();
+                if (archiver != null)
+                {
+                    AvatarArchive archive = archiver.GetAvatarArchive(fileName.Substring(0, fileName.LastIndexOf(".database")));
+                    archiveXML = archive.ArchiveXML;
+                    archive.FromOSD((OSDMap)OSDParser.DeserializeLLSDXml(File.ReadAllText(archiveXML)));
+                }
+                else
+                {
+                    MainConsole.Instance.Error("[AvatarArchive] Unable to load from database!");
+                    return null;
+                }
             }
-            MainConsole.Instance.Info("[AvatarArchive]: Loading archive from " + fileName);
+            else
+            {
+                
+                // need to be smart here...
+                fileName = PathHelpers.VerifyReadFile (fileName, ".aa", m_storeDirectory);
+                if (!File.Exists(fileName))
+                {
+                    MainConsole.Instance.Error("[AvatarArchive]: Unable to load from file: file does not exist!");
+                    return null;
+                }
+                MainConsole.Instance.Info("[AvatarArchive]: Loading archive from " + fileName);
 
-            archive.FromOSD((OSDMap)OSDParser.DeserializeLLSDXml(File.ReadAllText(fileName)));
+                archive.FromOSD((OSDMap)OSDParser.DeserializeLLSDXml(File.ReadAllText(fileName)));
+            }
 
             AvatarAppearance appearance = ConvertXMLToAvatarAppearance(archive.BodyMap);
 
@@ -212,7 +232,65 @@ namespace WhiteCore.Modules.Archivers
             archive.IsPublic = isPublic;
             archive.IsPortable = isPortable;
 
+            if (cmdparams[5].EndsWith(".database"))
+            {
+                IAvatarArchiverConnector archiver = DataManager.DataManager.RequestPlugin<IAvatarArchiverConnector>();
+                if (archiver != null)
+                {
+                    AvatarArchive archive = new AvatarArchive();
+                    archive.ArchiveXML = OSDParser.SerializeLLSDXmlString(map);
+
+                    // Add the extra details for archives
+                    archive.Name = cmdparams[5].Substring(0, cmdparams[5].LastIndexOf(".database"));
+                    if (cmdparams.Length > 7)
+                    {
+                        if (cmdparams.Contains("--snapshot"))
+                        {
+                            UUID snapshot;
+                            int index = 0;
+                            for(; index < cmdparams.Length; index++)
+                            {
+                                if(cmdparams[index] == "--snapshot")
+                                {
+                                    index++;
+                                    break;
+                                }
+                            }
+                            if(index < cmdparams.Length && UUID.TryParse(cmdparams[index], out snapshot))
+                            {
+                                archive.Snapshot = snapshot.ToString();
+                            }
+                        }
+                        else
+                        {
+                            archive.Snapshot = UUID.Zero.ToString();
+                        }
+                        if (cmdparams.Contains("--public"))
+                        {
+                            archive.IsPublic = 1;
+                        }
+                    }
+                    else
+                    {
+                        archive.Snapshot = UUID.Zero.ToString();
+                        archive.IsPublic = 0;
+                    }
+
+                    // Save the archive
+                    archiver.SaveAvatarArchive(archive);
+                    MainConsole.Instance.Info("[AvatarArchive] Saved archive to database as: " + archive.Name);
+                }
+                else
+                {
+                    MainConsole.Instance.Error("[AvatarArchive] Unable to save to database!");
+                    return;
+                }
+            }
+            else
+            {
+                
             File.WriteAllText(fileName, OSDParser.SerializeLLSDXmlString(archive.ToOSD()));
+            }
 
             if (snapshotUUID != UUID.Zero)
             {

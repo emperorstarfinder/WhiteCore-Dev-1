@@ -237,6 +237,10 @@ namespace WhiteCore.Modules.Web
 
                             if (AvatarArchive != "")
                             {
+
+                                // 20160302 -greythane- if loading from database
+                                //profile.AArchiveName = AvatarArchive + ".database";
+
                                 profile.AArchiveName = AvatarArchive;
 
                                 List<AvatarArchive> avarchives = webInterface.Registry.RequestModuleInterface<IAvatarAppearanceArchiver>().GetAvatarArchives();
@@ -331,6 +335,22 @@ namespace WhiteCore.Modules.Web
 
             vars.Add("UserTypeText", translator.GetTranslatedString("UserTypeText"));
             vars.Add("UserType", webInterface.UserTypeArgs(translator)) ;
+
+            // 20160302 -greythane- if using database archives
+            /*List<AvatarArchive> archives = Aurora.DataManager.DataManager.RequestPlugin<IAvatarArchiverConnector>().GetAvatarArchives(true);
+
+            List<Dictionary<string, object>> avatarArchives = new List<Dictionary<string, object>>();
+            IWebHttpTextureService webTextureService = webInterface.Registry.
+                RequestModuleInterface<IWebHttpTextureService>();
+            foreach (var archive in archives)
+                avatarArchives.Add(new Dictionary<string, object> { 
+                    { "AvatarArchiveName", archive.Name },
+                    { "AvatarArchiveSnapshotID", archive.Snapshot }, 
+                    { "AvatarArchiveSnapshotURL", webTextureService.GetTextureURL(UUID.Parse(archive.Snapshot)) } 
+                });
+
+            vars.Add("AvatarArchive", avatarArchives);
+            */
 
             List<AvatarArchive> archives = webInterface.Registry.RequestModuleInterface<IAvatarAppearanceArchiver>().GetAvatarArchives();
 
