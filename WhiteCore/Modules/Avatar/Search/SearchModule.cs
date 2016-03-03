@@ -32,6 +32,7 @@ using Nini.Config;
 using OpenMetaverse;
 using OpenMetaverse.Packets;
 using WhiteCore.Framework.ClientInterfaces;
+using WhiteCore.Framework.ConsoleFramework;
 using WhiteCore.Framework.DatabaseInterfaces;
 using WhiteCore.Framework.Modules;
 using WhiteCore.Framework.PresenceInfo;
@@ -581,18 +582,19 @@ namespace WhiteCore.Modules.Search
         {
             if (QueryFlags == 64) //Agent Owned
             {
+                //Find all the user owned land
+                List<ExtendedLandData> parcels = DirectoryService.GetParcelByOwner (client.AgentId);
+            	
                 //Get all the parcels
-                client.SendPlacesQuery (DirectoryService.GetParcelByOwner (client.AgentId).ToArray (), QueryID,
-                    TransactionID);
+                client.SendPlacesQuery (parcels.ToArray (), QueryID, TransactionID);
             }
-            if (QueryFlags == 256) //Group Owned
+            else if (QueryFlags == 256) //Group Owned
             {
                 //Find all the group owned land
                 List<ExtendedLandData> parcels = DirectoryService.GetParcelByOwner (QueryID);
-
-                //Send if we have any parcels
-                if (parcels.Count != 0)
-                    client.SendPlacesQuery (parcels.ToArray (), QueryID, TransactionID);
+                
+                // Send all group owned parcels
+                client.SendPlacesQuery (parcels.ToArray (), QueryID, TransactionID);
             }
         }
 
@@ -668,8 +670,16 @@ namespace WhiteCore.Modules.Search
         {
             IConfig searchConfig = config.Configs ["Search"];
             if (searchConfig != null) //Check whether we are enabled
+            {
                 if (searchConfig.GetString ("SearchModule", Name) == Name)
                 m_SearchEnabled = true;
+            	MainConsole.Instance.Info ("[Search] Search Services are enabled");
+            }
+            else
+            {
+            	m_SearchEnabled = false;
+            	MainConsole.Instance.Info ("[Search] Not configured, disabling");
+            }
         }
 
         public void AddRegion (IScene scene)
