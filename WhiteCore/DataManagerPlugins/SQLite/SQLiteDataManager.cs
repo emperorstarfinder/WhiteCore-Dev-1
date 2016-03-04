@@ -342,13 +342,8 @@ namespace WhiteCore.DataManager.SQLite
             return Query2(query, queryFilter, sort, start, count);
         }
 
-<<<<<<< HEAD
-        List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, uint? start,
-                                    uint? count)
-=======
         List<string> Query2(string query, QueryFilter queryFilter, Dictionary<string, bool> sort, 
                             uint? start, uint? count)
->>>>>>> develop
         {
             Dictionary<string, object> ps = new Dictionary<string, object>();
             List<string> parts;
@@ -564,12 +559,8 @@ namespace WhiteCore.DataManager.SQLite
         {
             var cmd = new SqliteCommand();
 
-<<<<<<< HEAD
-            string query = String.Format("insert into {0} values(", table);
-=======
             string query;
             query = String.Format("insert into {0} values(", table);
->>>>>>> develop
             int a = 0;
             foreach (object value in values)
             {
@@ -621,12 +612,8 @@ namespace WhiteCore.DataManager.SQLite
             var cmd = new SqliteCommand();
             Dictionary<string, object> ps = new Dictionary<string, object>();
 
-<<<<<<< HEAD
-            string query = String.Format("insert into {0} values (", table);
-=======
             string query;
             query = String.Format("insert into {0} values (", table);
->>>>>>> develop
             int i = 0;
             foreach (object value in values)
             {
@@ -748,10 +735,7 @@ namespace WhiteCore.DataManager.SQLite
 
                         CloseReaderCommand(cmd);
                         return false;
-<<<<<<< HEAD
-=======
 
->>>>>>> develop
                     }
                 }
                 catch
@@ -1313,11 +1297,7 @@ namespace WhiteCore.DataManager.SQLite
                 }
             }
 
-<<<<<<< HEAD
-            if (checkForPrimary && autoIncrementField != null)
-=======
             if (checkForPrimary && (autoIncrementField != null))
->>>>>>> develop
             {
                 primary = new IndexDefinition
                               {
