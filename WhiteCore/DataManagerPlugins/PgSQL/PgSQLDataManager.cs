@@ -892,7 +892,7 @@ namespace WhiteCore.DataManager.PgSQL
             case ColumnTypes.UInteger11:
                 return "INTEGER";       // need to process unsigned // (11) UNSIGNED";
             case ColumnTypes.UInteger30:
-                return "Bigint";       // need to process unsigned // (30) UNSIGNED";
+                return "BIGINT";       // need to process unsigned // (30) UNSIGNED";
             case ColumnTypes.Char40:
                 return "CHAR(40)";
             case ColumnTypes.Char39:
@@ -1137,20 +1137,29 @@ namespace WhiteCore.DataManager.PgSQL
             //return retVal;
         }
 
-        internal string ConvertPgTypeToColumnDef(string PGFieldType)
+        internal string ConvertPgTypeToColumnDef(string PGFieldType, string colsize)
         {
+            if (colsize == "")
+                colsize = "0";
+            
             // convert expanded type definitions to standard column types
+            if (PGFieldType == "smallint")
+                return "tinyint(2)";
+
             if (PGFieldType == "character varying")
-                return "varchar";
+                return "varchar(" + colsize + ")";
 
             if (PGFieldType == "character")
-                return "char";
+                return "char(" + colsize + ")";
 
             if (PGFieldType == "bpchar")
-                return "char";
+                return "char(" + colsize + ")";
 
             if (PGFieldType == "double precision")
                 return "double";
+
+            if (PGFieldType == "serial" || PGFieldType == "bigserial") 
+                return "int(" + colsize + ")";
 
             // all the rest are correct
             return PGFieldType;
@@ -1163,7 +1172,8 @@ namespace WhiteCore.DataManager.PgSQL
             IDataReader rdr = null;
             try
             {
-                var qry = string.Format ("select column_name,data_type,column_default from information_schema.columns where table_name='{0}';",tableName);
+                var qry = string.Format ("select column_name,data_type,column_default, character_maximum_length, is_nullable" +
+                    " from information_schema.columns where table_name='{0}';",tableName);
 
                 //rdr = Query (string.Format ("desc {0}", tableName), new Dictionary<string, object> ());
                 rdr = Query (qry);
@@ -1176,12 +1186,14 @@ namespace WhiteCore.DataManager.PgSQL
                     //var extra = rdr["Extra"];
                     object defaultValue = rdr ["column_default"];
 
-                    var pgType = ConvertPgTypeToColumnDef(type.ToString());
+                    var colsize = rdr ["character_maximum_length"];
+                    var pgType = ConvertPgTypeToColumnDef(type.ToString(), colsize.ToString());
                     ColumnTypeDef typeDef = ConvertTypeToColumnType (pgType);
                     //ColumnTypeDef typeDef = ConvertTypeToColumnType (type.ToString ());
 
-                    typeDef.isNull = rdr ["Null"].ToString () == "YES";
-                    typeDef.auto_increment = rdr ["Serial"].ToString () == "YES";
+                    typeDef.isNull = rdr ["is_nullable"].ToString () == "YES";
+//                    typeDef.auto_increment = rdr ["serial"].ToString () == "YES";
+                    typeDef.auto_increment = pgType == "serial";
                     typeDef.defaultValue = defaultValue is DBNull
                         ? null
                         : defaultValue.ToString ();
@@ -1215,6 +1227,7 @@ namespace WhiteCore.DataManager.PgSQL
         protected override Dictionary<string, IndexDefinition> ExtractIndicesFromTable (string tableName)
         {
             var defs = new Dictionary<string, IndexDefinition> ();
+            IDataReader indxrdr = null;
             IDataReader rdr = null;
             var indexLookup = new Dictionary<string, Dictionary<uint, string>> ();
             var indexIsUnique = new Dictionary<string, bool> ();
@@ -1223,21 +1236,31 @@ namespace WhiteCore.DataManager.PgSQL
 
             try
             {
-                var qry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
+                var idxqry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
+//                var qry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
 //                rdr = Query (string.Format ("SHOW INDEX IN {0}", tableName), new Dictionary<string, object> ());
-                rdr = Query (qry);
-                while (rdr.Read ())
+                indxrdr = Query (idxqry);
+                while (indxrdr.Read ())
                 {
-                    string name = rdr ["Column_name"].ToString ();
-                    bool unique = uint.Parse (rdr ["Non_unique"].ToString ()) == 0;
-                    string index = rdr ["Key_name"].ToString ();
-                    uint sequence = uint.Parse (rdr ["Seq_in_index"].ToString ());
-                    if (!indexLookup.ContainsKey (index))
+                    string indexname = indxrdr ["indexname"].ToString ();
+                    var qry = string.Format ("select * from pg_indexes where indexname = '{0}';",indexname);
+                    //var qry = string.Format ("select pg_get_indexdef({0});",indexname);
+                    rdr = Query (qry);
+                    while (rdr.Read ())
                     {
-                        indexLookup [index] = new Dictionary<uint, string> ();
+
+                        //string indexname = rdr ["indexnamecolumns"].ToString ();
+                        string unq = rdr ["unique"].ToString ();
+                        bool unique = uint.Parse (rdr ["unique"].ToString ()) == 0;
+                        string index = rdr ["columns"].ToString ();
+          //          uint sequence = uint.Parse (rdr ["seq_in_index"].ToString ());
+                        if (!indexLookup.ContainsKey (index))
+                        {
+                            indexLookup [index] = new Dictionary<uint, string> ();
+                        }
+                        indexIsUnique [index] = unique;
+                        //indexLookup [index] [sequence - 1] = name;
                     }
-                    indexIsUnique [index] = unique;
-                    indexLookup [index] [sequence - 1] = name;
                 }
             } catch (Exception e)
             {

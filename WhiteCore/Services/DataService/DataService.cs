@@ -30,12 +30,12 @@ using System;
 using System.Collections.Generic;
 using Nini.Config;
 using WhiteCore.DataManager.MySQL;
-using WhiteCore.DataManager.PgSQL;
 using WhiteCore.DataManager.SQLite;
 using WhiteCore.Framework.ConsoleFramework;
 using WhiteCore.Framework.ModuleLoader;
 using WhiteCore.Framework.Modules;
 using WhiteCore.Framework.Services;
+using WhiteCore.DataManager.PgSQL;
 
 namespace WhiteCore.Services.DataService
 {
