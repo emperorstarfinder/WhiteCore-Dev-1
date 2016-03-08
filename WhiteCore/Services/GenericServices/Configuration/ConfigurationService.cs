@@ -32,17 +32,21 @@ using WhiteCore.Framework.Services;
 using Nini.Config;
 using System.Collections.Generic;
 using System.Linq;
+using OpenMetaverse.StructuredData;
+using WhiteCore.Framework.Utilities;
 
 namespace WhiteCore.Services
 {
     /// <summary>
-    ///     This is an application plugin so that it loads as it is used by many things (IService modules especially)
+    ///     This is an application plugin so that it loads asap as it is used by many things (IService modules especially)
     /// </summary>
     public class ConfigurationService : IConfigurationService, IService
     {
         #region Declares
 
         protected Dictionary<string, string> m_urls = new Dictionary<string, string>();
+        protected Dictionary<string, string> m_urlsIwc = new Dictionary<string, string>();
+
         protected IConfigSource m_config;
 
         #endregion
@@ -73,6 +77,69 @@ namespace WhiteCore.Services
                 return;
             foreach(KeyValuePair<string, List<string>> kvp in uris)
                 m_urls.Add(kvp.Key, kvp.Value[0]);
+        }
+
+        // IWC stuff below.... not fully working or implemented yet
+        // added to get initial compile operating.. needs to be determined if required etc
+        public string FindIwcValueOf(string key)
+        {
+            if(m_urlsIwc.ContainsKey(key))
+                return m_urlsIwc[key];
+            return "";
+        }
+
+        public Dictionary<string, string> GetIwcURIs()
+        {
+            return new Dictionary<string, string>(m_urlsIwc);
+        }
+
+        public virtual void AddIwcURIs(Dictionary<string, List<string>> uris)
+        {
+            if (uris == null)
+                return;
+            foreach(KeyValuePair<string, List<string>> kvp in uris)
+                m_urlsIwc.Add(kvp.Key, kvp.Value[0]);
+        }
+
+        public virtual void RemoveIwcURIs(string key)
+        {
+            if (!m_urlsIwc.ContainsKey (key))
+                return;
+            m_urlsIwc.Remove (key);
+        }
+
+        public virtual void AddIwcUrls(string key, OSDMap urls)
+        {
+            //m_urls.Remove("ServerURI");               // why??
+            foreach (KeyValuePair<string, OSD> kvp in urls)
+            {
+                if (kvp.Value == "" && kvp.Value.Type != OSDType.Array)
+                    continue;
+
+                if (!m_urlsIwc.ContainsKey(kvp.Key))
+                {
+                    if (kvp.Value.Type == OSDType.String)
+                        m_urlsIwc[kvp.Key] = kvp.Value;
+                    else if (kvp.Value.Type != OSDType.Boolean) // "Success" coming from IWC
+                        m_urlsIwc[kvp.Key] = string.Join(",", ((OSDArray)kvp.Value).ConvertAll<string>((osd) => osd).ToArray());
+                }
+                else
+                {
+                    List<string> keys = kvp.Value.Type == OSDType.Array ? ((OSDArray)kvp.Value).ConvertAll<string>((osd) => osd) : new List<string>(new string[1] { kvp.Value.AsString() });
+
+                    foreach (string url in keys)
+                    {
+                        //Check to see whether the base URLs are the same (removes the UUID at the end)
+                        if (url.Length < 36)
+                            continue; //Not a URL
+
+                        string u = url.Remove(url.Length - 36, 36);
+                        if (!m_urlsIwc[kvp.Key].Contains(u))
+                            m_urlsIwc[kvp.Key] = m_urls[kvp.Key] + "," + kvp.Value;
+                    }
+                }
+            }
+            m_urlsIwc[key] = urls;
         }
 
         #endregion

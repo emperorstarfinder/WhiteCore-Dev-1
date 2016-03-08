@@ -25,24 +25,26 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using WhiteCore.Framework.ConsoleFramework;
-using WhiteCore.Framework.Modules;
-using WhiteCore.Framework.Servers;
-using WhiteCore.Framework.Servers.HttpServer.Implementation;
-using WhiteCore.Framework.Services;
-using Nini.Config;
-using Nwc.XmlRpc;
 using System;
 using System.Collections;
 using System.IO;
 using System.Net;
 using System.Text;
+using Nini.Config;
+using Nwc.XmlRpc;
+using WhiteCore.Framework.ConsoleFramework;
+using WhiteCore.Framework.Modules;
+using WhiteCore.Framework.Servers;
+using WhiteCore.Framework.Servers.HttpServer.Implementation;
+using WhiteCore.Framework.Services;
 
 namespace WhiteCore.Services
 {
     public class GridInfoHandlers : IGridInfo
     {
-        private readonly Hashtable _info = new Hashtable();
+        readonly Hashtable _info = new Hashtable();
+        protected IConfigSource m_config;
+        protected IRegistryCore m_registry;
 
         public string GridName { get; protected set; }
         public string GridNick { get; protected set; }
@@ -61,8 +63,6 @@ namespace WhiteCore.Services
         public string GridMarketplaceURI { get; protected set; }
         public string GridTutorialURI { get; protected set; }
         public string GridSnapshotConfigURI { get; protected set; }
-        protected IConfigSource m_config;
-        protected IRegistryCore m_registry;
 
         /// <summary>
         ///     Instantiate a GridInfoService object.
@@ -209,13 +209,13 @@ namespace WhiteCore.Services
             return uri.Replace ("ServersHostname", MainServer.Instance.HostName);
         }
 
-        private string GetConfig(IConfigSource config, string p)
+        string GetConfig(IConfigSource config, string p)
         {
             IConfig gridCfg = config.Configs["GridInfoService"];
             return gridCfg.GetString(p, "");
         }
 
-        private void IssueWarning()
+        void IssueWarning()
         {
             MainConsole.Instance.Warn("[GRID INFO SERVICE]: found no [GridInfo] section in your configuration files");
             MainConsole.Instance.Warn(
@@ -259,5 +259,12 @@ namespace WhiteCore.Services
 
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
+
+        public Hashtable GetGridInfoHashtable()
+        {
+            UpdateGridInfo();
+            return new Hashtable(_info);
+        }
+
     }
 }

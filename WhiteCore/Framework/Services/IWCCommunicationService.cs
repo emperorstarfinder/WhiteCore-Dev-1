@@ -1,5 +1,5 @@
-﻿/*
- * Copyright (c) Contributors, http://whitecore-sim.org/, http://aurora-sim.org
+/*
+ * Copyright (c) Contributors, http://WhiteCore-sim.org/, http://opensimulator.org/
  * See CONTRIBUTORS.TXT for a full list of copyright holders.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,40 +25,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-using System.Collections;
-using System.Collections.Generic;
+using OpenMetaverse;
+using OpenMetaverse.StructuredData;
+
 namespace WhiteCore.Framework.Services
 {
-    public interface IGridInfo
+    public interface IWCCommunicationService
     {
-        string GridName { get; }
-        string GridNick { get; }
-        string GridLoginURI { get; }
-        string GridWelcomeURI { get; }
-        string GridEconomyURI { get; }
-        string GridAboutURI { get; }
-        string GridHelpURI { get; }
-        string GridRegisterURI { get; }
-        string GridForgotPasswordURI { get; }
-        string GridMapTileURI { get; set; }
-        string AgentAppearanceURI { get; set; }
-        string GridWebProfileURI { get; }
-        string GridSearchURI { get; }
-        string GridDestinationURI { get; }
-        string GridMarketplaceURI { get; }
-        string GridTutorialURI { get; }
-        string GridSnapshotConfigURI { get; }
-
-        void UpdateGridInfo();
-        Hashtable GetGridInfoHashtable ();
-
-    }
-
-    public interface IGridServerInfoService
-    {
-        List<string> GetGridURIs(string key);
-        string GetGridURI(string key);
-        Dictionary<string, List<string>> RetrieveAllGridURIs(bool secure);
-        void AddURI(string key, string value);
+        GridRegion GetRegionForGrid(string regionName, string url);
+        OSDMap GetUrlsForUser(GridRegion region, UUID userID);
     }
 }

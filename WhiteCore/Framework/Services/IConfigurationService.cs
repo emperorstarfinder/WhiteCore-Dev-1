@@ -26,6 +26,7 @@
  */
 
 using System.Collections.Generic;
+using OpenMetaverse.StructuredData;
 namespace WhiteCore.Framework.Services
 {
     /// <summary>
@@ -50,5 +51,39 @@ namespace WhiteCore.Framework.Services
         /// </summary>
         /// <param name="uris"></param>
         void SetURIs(Dictionary<string, List<string>> uris);
+
+        // IWC 
+        /// <summary>
+        /// Finds the URI of the required IWC service.
+        /// </summary>
+        /// <returns>The URI of the IWC service.</returns>
+        /// <param name="key">Key.</param>
+        string FindIwcValueOf(string key);
+
+        /// <summary>
+        /// Gets the list of all IWC URIs registered for this grid
+        /// </summary>
+        /// <returns>The IWC URIs.</returns>
+        Dictionary<string, string> GetIwcURIs();
+
+        /// <summary>
+        /// Adds a list of IWC URIs.
+        /// </summary>
+        /// <param name="uris">IWC URI list.</param>
+        void AddIwcURIs (Dictionary<string, List<string>> uris);
+
+        /// <summary>
+        /// Removes the specified IWC URIs.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        void RemoveIwcURIs (string key);
+
+        /// <summary>
+        /// Adds the IWC urli from a returned OSD map.
+        /// </summary>
+        /// <param name="key">Key.</param>
+        /// <param name="urls">Urls.</param>
+        void AddIwcUrls (string key, OSDMap urls);
+
     }
 }
