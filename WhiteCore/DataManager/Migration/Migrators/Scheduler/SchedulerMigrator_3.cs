@@ -41,7 +41,7 @@ namespace WhiteCore.DataManager.Migration.Migrators.Scheduler
             Schema = new List<SchemaDefinition>();
 
             AddSchema("scheduler", ColDefs(
-                ColDef("id", ColumnTypes.String36),
+                ColDef("id", ColumnTypes.UUID),
                 ColDef("fire_function", ColumnTypes.String128),
                 ColDef("fire_params", ColumnTypes.String1024),
                 ColDef("run_once", ColumnTypes.TinyInt1),
@@ -49,7 +49,7 @@ namespace WhiteCore.DataManager.Migration.Migrators.Scheduler
                 ColDef("runs_next", ColumnTypes.DateTime),
                 ColDef("keep_history", ColumnTypes.TinyInt1),
                 ColDef("require_reciept", ColumnTypes.TinyInt1),
-                ColDef("last_history_id", ColumnTypes.String36),
+                ColDef("last_history_id", ColumnTypes.UUID),
                 ColDef("create_time", ColumnTypes.DateTime),
                 ColDef("start_time", ColumnTypes.DateTime),
                 ColDef("run_every_type", ColumnTypes.Integer30),
@@ -59,9 +59,9 @@ namespace WhiteCore.DataManager.Migration.Migrators.Scheduler
                         Name = "schedule_for",
                         Type = new ColumnTypeDef
                                    {
-                                       Type = ColumnType.String,
+                                       Type = ColumnType.UUID,
                                        Size = 36,
-                                       defaultValue = OpenMetaverse.UUID.Zero.ToString()
+                                       defaultValue = "" + OpenMetaverse.UUID.Zero.ToString()
                                    }
                     }
                                        ), IndexDefs(
@@ -71,8 +71,8 @@ namespace WhiteCore.DataManager.Migration.Migrators.Scheduler
                                               ));
 
             AddSchema("scheduler_history", ColDefs(
-                ColDef("id", ColumnTypes.String36),
-                ColDef("scheduler_id", ColumnTypes.String36),
+                ColDef("id", ColumnTypes.UUID),
+                ColDef("scheduler_id", ColumnTypes.UUID),
                 ColDef("ran_time", ColumnTypes.DateTime),
                 ColDef("run_time", ColumnTypes.DateTime),
                 ColDef("reciept", ColumnTypes.String1024),

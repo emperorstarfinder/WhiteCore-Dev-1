@@ -120,7 +120,8 @@ namespace WhiteCore.Framework.Utilities
         SQLite,
         MySql,
         MSSQL2008,
-        MSSQL7
+        MSSQL7,
+        PySql
     }
 
     public class SchemaDefinition
@@ -228,6 +229,7 @@ namespace WhiteCore.Framework.Utilities
         Float,
         Binary32,
         Binary64,
+        UUID,
         Unknown        
     }
 
@@ -300,6 +302,7 @@ namespace WhiteCore.Framework.Utilities
         public static readonly ColumnTypeDef UTinyInt4 = new ColumnTypeDef(ColumnType.TinyInt, 4, true);
         public static readonly ColumnTypeDef Binary32 = new ColumnTypeDef(ColumnType.Binary, 32);
         public static readonly ColumnTypeDef Binary64 = new ColumnTypeDef(ColumnType.Binary, 64);
+        public static readonly ColumnTypeDef UUID = new ColumnTypeDef(ColumnType.UUID, 36);
         public static readonly ColumnTypeDef Unknown = new ColumnTypeDef(ColumnType.Unknown);
 
 
@@ -374,7 +377,17 @@ namespace WhiteCore.Framework.Utilities
             if (idef != null && idef.Type == Type && idef.Fields.Length == Fields.Length)
             {
                 uint i = 0;
-                return idef.Fields.All(field => field == Fields[i++]);
+                bool ok = true;
+                for ( i=0; i< Fields.Length; i++)
+                {
+                    var f1 = idef.Fields [i].ToLower ();
+                    var f2 = Fields [i].ToLower ();
+                    if (f1 != f2)
+                    //if (idef.Fields[i].ToLower() != Fields[i].ToLower())
+                        ok = false;
+                }
+                return ok;
+                //return idef.Fields.All (field => field.ToLower () == Fields [i++].ToLower ());
             }
             return false;
         }

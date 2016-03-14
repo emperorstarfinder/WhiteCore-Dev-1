@@ -131,15 +131,40 @@ namespace WhiteCore.DataManager.PgSQL
         #endregion
 
         #region Query
-        public IDataReader Query (string sql)
+        /*NpgsqlConnection dbquerycon;
+        protected NpgsqlCommand PrepReader(string sql)
+        {
+            try
+            {
+                NpgsqlConnection connection = new NpgsqlConnection(m_connectionString);
+                connection.Open();
+                var cmd = new NpgsqlCommand (sql, connection);
+
+                return cmd;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+            return null;
+        }
+
+        protected void CloseQueryConnection()
+        {
+            dbquerycon.Close();
+        }
+        */
+        public NpgsqlCommand Query (string sql)
         {
             return Query( sql, new Dictionary<string, object> ());
         }
 
-        public IDataReader Query (string sql, Dictionary<string, object> parameters)
+
+        public NpgsqlCommand Query (string sql, Dictionary<string, object> parameters)
         {
             try
             {
+                //var qrycmd = PrepReader(sql);
                 var dbcon = new NpgsqlConnection (m_connectionString);
                 dbcon.Open ();
                 var cmd = new NpgsqlCommand (sql, dbcon);
@@ -147,10 +172,12 @@ namespace WhiteCore.DataManager.PgSQL
                 foreach (KeyValuePair<string, object> p in parameters)
                      cmd.Parameters.AddWithValue (p.Key, p.Value);
  
-                NpgsqlDataReader dr = cmd.ExecuteReader ();
+        //*        NpgsqlDataReader dr = cmd.ExecuteReader ();
                 //dbcon.Close ();
 
-                return dr;
+       //*         return dr;  
+             
+                return cmd;
             } catch (Exception e)
             {
                 MainConsole.Instance.Error ("[PgSQLDataLoader] Query(" + sql + "), " + e);
@@ -215,15 +242,17 @@ namespace WhiteCore.DataManager.PgSQL
 
         List<string> QueryFullData2 (string query)
         {
-            var dbcon = new NpgsqlConnection (m_connectionString);
-            dbcon.Open ();
+//*            var dbcon = new NpgsqlConnection (m_connectionString);
+//*            dbcon.Open ();
             //NpgsqlCommand command = new NpgsqlCommand (query, dbcon);
 
             IDataReader reader;
             var retVal = new List<string> ();
             try
             {
-                using (reader = Query (query, new Dictionary<string, object> ()))
+                var cmd = Query (query, new Dictionary<string, object> ());
+//                using (reader = Query (query, new Dictionary<string, object> ()))
+                using (reader = cmd.ExecuteReader())
                 {
                     while (reader.Read ())
                     {
@@ -232,7 +261,8 @@ namespace WhiteCore.DataManager.PgSQL
                             retVal.Add (reader [i].ToString ());
                         }
                     }
-                    dbcon.Close ();
+//*                    dbcon.Close ();
+                    cmd.Connection.Close();
                     return retVal;
                 }
             } catch (Exception e)
@@ -245,16 +275,23 @@ namespace WhiteCore.DataManager.PgSQL
         public override DataReaderConnection QueryData (string whereClause, string table, string wantedValue)
         {
             string query = String.Format ("select {0} from {1} {2}", wantedValue, table, whereClause);
-            return new DataReaderConnection { DataReader = QueryData2 (query) };
+            var cmd = QueryData2 (query);
+            var data = cmd.ExecuteReader();    
+            //            return new DataReaderConnection { DataReader = QueryData2 (query) };
+            return new DataReaderConnection { DataReader = data, Connection = cmd.Connection };
         }
 
         public override DataReaderConnection QueryData (string whereClause, QueryTables tables, string wantedValue)
         {
             string query = string.Format ("SELECT {0} FROM {1} {2}", wantedValue, tables.ToSQL (), whereClause);
-            return new DataReaderConnection { DataReader = QueryData2 (query) };
+            var cmd = QueryData2 (query);
+            var data = cmd.ExecuteReader();    
+            return new DataReaderConnection { DataReader = data, Connection = cmd.Connection };
+//            return new DataReaderConnection { DataReader = QueryData2 (query) };
         }
 
-        IDataReader QueryData2 (string query)
+        //IDataReader QueryData2 (string query)
+        NpgsqlCommand QueryData2 (string query)
         {
             return Query (query, new Dictionary<string, object> ());
         }
@@ -305,15 +342,17 @@ namespace WhiteCore.DataManager.PgSQL
                 }
             }
 
-            var dbcon = new NpgsqlConnection (m_connectionString);
-            dbcon.Open ();
+//*            var dbcon = new NpgsqlConnection (m_connectionString);
+//*            dbcon.Open ();
             //NpgsqlCommand command = new NpgsqlCommand (query, dbcon);
 
             IDataReader reader;
             int i = 0;
             try
             {
-                using (reader = Query (query, ps))
+                var cmd = Query (query, ps);
+//                using (reader = Query (query, ps))
+                using (reader = cmd.ExecuteReader())
                 {
                     while (reader.Read ())
                     {
@@ -323,7 +362,8 @@ namespace WhiteCore.DataManager.PgSQL
                             retVal.Add (r == typeof(DBNull) ? null : reader [i].ToString ());
                         }
                     }
-                    dbcon.Close ();
+//*                    dbcon.Close ();
+                    cmd.Connection.Close();
                     return retVal;
                 }
             } catch (Exception e)
@@ -373,7 +413,9 @@ namespace WhiteCore.DataManager.PgSQL
             IDataReader reader;
             try
             {
-                using (reader = Query (query, ps))
+                var cmd = Query (query, ps);
+                using (reader = cmd.ExecuteReader())
+//                using (reader = Query (query, ps))
                 {
                     while (reader.Read ())
                     {
@@ -383,7 +425,8 @@ namespace WhiteCore.DataManager.PgSQL
                             AddValueToList (ref retVal, reader.GetName (i), r == typeof(DBNull) ? null : reader [i].ToString ());
                         }
                     }
-                    dbcon.Close ();
+                    //dbcon.Close ();
+                    cmd.Connection.Close();
                     return retVal;
                 }
             } catch (Exception e)
@@ -688,43 +731,54 @@ namespace WhiteCore.DataManager.PgSQL
 
             var indicesQuery = new List<string> (indexDefinitions.Length);
             var indicesExtra = new List<string> ();
+            string indicesUnique = "";
 
-            // add any unique 
+            // add any unique or normal index
             foreach (IndexDefinition index in indexDefinitions)
             {
-                string type;
+                string type = "";
                 switch (index.Type)
                 {
                 case IndexType.Primary:
-                    continue;
+                    continue;               // added above
                 case IndexType.Unique:
                     type = "UNIQUE";
-                    break;
-                default:
-                    //type = "KEY";
                     //break;
+                    indicesExtra.Add ("CREATE UNIQUE INDEX idx_" + string.Join ("_", index.Fields) + " ON " + table + "(" +
+                        string.Join (", ", index.Fields) + ")");
+                    continue;
+                default:
                     indicesExtra.Add ("CREATE INDEX idx_" + string.Join ("_", index.Fields) + " ON " + table + "(" +
                     string.Join (", ", index.Fields) + ")");
                     continue;
                 }
 
-                if (index.IndexSize == 0)
+/*                if (index.IndexSize == 0)
                     //indicesQuery.Add (string.Format ("{0}( {1} )", type, "`" + string.Join ("`, `", index.Fields) + "`"));
-                    indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields)));
+                    //indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields)));
+                    indicesUnique = string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields));
                 else
                     //indicesQuery.Add (string.Format ("{0}( {1} )", type, "`" + string.Join ("`, `", index.Fields) + "`" + "(" + index.IndexSize + ")"));
-                    indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields) + "(" + index.IndexSize + ")"));
-
+                    //indicesQuery.Add (string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields) + "(" + index.IndexSize + ")"));
+                    indicesUnique = string.Format ("{0}( {1} )", type, string.Join (", ", index.Fields) + "(" + index.IndexSize + ")");
+*/
             }
 
-            string query = string.Format ("CREATE TABLE " + table + " ( {0} {1})",
-                               string.Join (", ", columnDefinition.ToArray ()),
-                               indicesQuery.Count > 0
-                                             ? ", " + string.Join (", ", indicesQuery.ToArray ())
-                                             : string.Empty);
+            // the main table/index creation (primary index only)
+            string query = string.Format ("CREATE TABLE " + table + " ( {0})",
+                string.Join (", ", columnDefinition.ToArray ()) );
+
+            //string query = string.Format ("CREATE TABLE " + table + " ( {0} {1})",
+            //                       string.Join (", ", columnDefinition.ToArray ()),
+            //    indicesUnique == "" ? string.Empty: ", " + indicesUnique);
+            
+//                string query = string.Format ("CREATE TABLE " + table + " ( {0} {1})",
+//                    string.Join (", ", columnDefinition.ToArray ()),
+//                    indicesQuery.Count > 0
+//                    ? ", " + string.Join (", ", indicesQuery[0]) //.ToArray ())    Only a single index allowed on creation of table
+
             // need to create additional indexes using the CREATE INDEX command
             // eg CREATE INDEX idx_flags_scope ON gridregions( Flags, ScopeID );
-
             try
             {
                 ExecuteNonQuery (query);
@@ -796,7 +850,7 @@ namespace WhiteCore.DataManager.PgSQL
                 }
                 foreach (
                     string query in modifiedColumns.Values.Select(
-                        column => "modify column '" + column.Name + "' " + GetColumnTypeStringSymbol(column.Type) + " ")
+                        column => "rename column '" + column.Name + "' " + GetColumnTypeStringSymbol(column.Type) + " ")
                     .Select(
                         modifiedColumnsQuery => string.Format("alter table " + table + " " + modifiedColumnsQuery)))
                 {
@@ -954,9 +1008,9 @@ namespace WhiteCore.DataManager.PgSQL
             case ColumnTypes.LongText:
                 return "TEXT";
             case ColumnTypes.Blob:
-                return "BYTEA";
+                return "BLOB";
             case ColumnTypes.LongBlob:
-                return "BYTEA";
+                return "BLOB";
             case ColumnTypes.Date:
                 return "DATE";
             case ColumnTypes.DateTime:
@@ -970,9 +1024,11 @@ namespace WhiteCore.DataManager.PgSQL
             case ColumnTypes.UTinyInt4:
                 return "INTEGER";    // need to process unsigned // UNSIGNED";
             case ColumnTypes.Binary32:
-                return "BYTEA";
+                return "BINARY(32)";
             case ColumnTypes.Binary64:
-                return "BYTEA";
+                return "BINARY(64)";
+            case ColumnTypes.UUID:
+                return "CHAR(36)";
             default:
                 throw new DataManagerException ("Unknown column type.");
             }
@@ -984,8 +1040,6 @@ namespace WhiteCore.DataManager.PgSQL
             switch (coldef.Type)
             {
             case ColumnType.Blob:
-                symbol = "BYTEA";
-                break;
             case ColumnType.LongBlob:
                 symbol = "BYTEA";
                 break;
@@ -1017,11 +1071,7 @@ namespace WhiteCore.DataManager.PgSQL
                 symbol = "VARCHAR(" + coldef.Size + ")";
                 break;
             case ColumnType.Text:
-                symbol = "TEXT";
-                break;
             case ColumnType.MediumText:
-                symbol = "TEXT";
-                break;
             case ColumnType.LongText:
                 symbol = "TEXT";
                 break;
@@ -1094,8 +1144,6 @@ namespace WhiteCore.DataManager.PgSQL
 
         public override bool TableExists (string table)
         {
-       
-//            var qry = string.Format ("SELECT EXISTS( SELECT * FROM information_schema.tables WHERE table_schema = '{0}' AND table_name = '{1}')",
             var qry = string.Format ("SELECT * FROM information_schema.tables WHERE table_schema = '{0}' AND table_name = '{1}';",
                 "whitecore", table);
 
@@ -1103,66 +1151,75 @@ namespace WhiteCore.DataManager.PgSQL
             // returns -1 if table does not exist
 
 
-            IDataReader reader;
+            IDataReader rdr;
             var retVal = new List<string> ();
             //bool retVal = false;
             try
             {
-              
-                reader = Query (qry);
+                var cmd = Query (qry);
+//                rdr = Query (qry);
+                rdr = cmd.ExecuteReader();
                 {
             //        reader.Read();
             //        retVal = (reader.FieldCount > 1);
-                    while (reader.Read ())
+                    while (rdr.Read ())
                     {
-                        for (int i = 0; i < reader.FieldCount; i++)
+                        for (int i = 0; i < rdr.FieldCount; i++)
                         {
 //                            retVal = (reader.RecordsAffected > 0);
-                            retVal.Add (reader [i].ToString ().ToLower ());
+                            retVal.Add (rdr [i].ToString ().ToLower ());
                         }
 
                     }
 
                 }
-                if (reader != null)
-                    reader.Close ();
+                // tidy up
+                if (rdr != null)
+                    rdr.Close ();
+                cmd.Connection.Close();
+
             } catch (Exception e)
             {
                 MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] TableExists: {0}", e);
             }
 
-            // tidy up
 
             return retVal.Contains (table.ToLower ());
             //return retVal;
         }
 
-        internal string ConvertPgTypeToColumnDef(string PGFieldType, string colsize)
+        internal string ConvertPgTypeToColumnDef(string pgFieldType, string colsize)
         {
             if (colsize == "")
                 colsize = "0";
             
             // convert expanded type definitions to standard column types
-            if (PGFieldType == "smallint")
+            if (pgFieldType == "smallint")
                 return "tinyint(2)";
 
-            if (PGFieldType == "character varying")
+            if (pgFieldType == "character varying")
                 return "varchar(" + colsize + ")";
 
-            if (PGFieldType == "character")
+            if (pgFieldType == "character")
                 return "char(" + colsize + ")";
 
-            if (PGFieldType == "bpchar")
+            if (pgFieldType == "bpchar")
                 return "char(" + colsize + ")";
 
-            if (PGFieldType == "double precision")
+            if (pgFieldType == "double precision")
                 return "double";
+            
+            if (pgFieldType == "bytea")
+                return "blob";
+            
+            if (pgFieldType == "timestamp without time zone")
+                return "datetime";
 
-            if (PGFieldType == "serial" || PGFieldType == "bigserial") 
+            if (pgFieldType == "serial" || pgFieldType == "bigserial") 
                 return "int(" + colsize + ")";
 
             // all the rest are correct
-            return PGFieldType;
+            return pgFieldType;
         }
 
         protected override List<ColumnDefinition> ExtractColumnsFromTable (string tableName)
@@ -1176,7 +1233,9 @@ namespace WhiteCore.DataManager.PgSQL
                     " from information_schema.columns where table_name='{0}';",tableName);
 
                 //rdr = Query (string.Format ("desc {0}", tableName), new Dictionary<string, object> ());
-                rdr = Query (qry);
+//                rdr = Query (qry);
+                var cmd = Query(qry);
+                rdr = cmd.ExecuteReader();
                 while (rdr.Read ())
                 {
 
@@ -1203,11 +1262,15 @@ namespace WhiteCore.DataManager.PgSQL
                         Type = typeDef,
                     });
                 }
+                if (rdr != null)
+                    rdr.Close ();
+                cmd.Connection.Close();
+                
             } catch (Exception e)
             {
                 MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e);
-            } finally
-
+            }// finally
+            /*
             {
                 try
                 {
@@ -1221,13 +1284,14 @@ namespace WhiteCore.DataManager.PgSQL
                     MainConsole.Instance.DebugFormat ("[PgSQLDataLoader] ExtractColumnsFromTable: {0}", e);
                 }
             }
+*/
+
             return defs;
         }
 
         protected override Dictionary<string, IndexDefinition> ExtractIndicesFromTable (string tableName)
         {
             var defs = new Dictionary<string, IndexDefinition> ();
-            IDataReader indxrdr = null;
             IDataReader rdr = null;
             var indexLookup = new Dictionary<string, Dictionary<uint, string>> ();
             var indexIsUnique = new Dictionary<string, bool> ();
@@ -1236,36 +1300,78 @@ namespace WhiteCore.DataManager.PgSQL
 
             try
             {
-                var idxqry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
-//                var qry = string.Format ("select * from pg_indexes where tablename = '{0}'",tableName);
-//                rdr = Query (string.Format ("SHOW INDEX IN {0}", tableName), new Dictionary<string, object> ());
-                indxrdr = Query (idxqry);
-                while (indxrdr.Read ())
+                var idxqry = string.Format ("select indexdef from pg_indexes where tablename = '{0}'",tableName);
+                var cmd  = Query (idxqry);
+                rdr = cmd.ExecuteReader();
+//                rdr = Query (idxqry);
+                while (rdr.Read ())
                 {
-                    string indexname = indxrdr ["indexname"].ToString ();
-                    var qry = string.Format ("select * from pg_indexes where indexname = '{0}';",indexname);
-                    //var qry = string.Format ("select pg_get_indexdef({0});",indexname);
-                    rdr = Query (qry);
-                    while (rdr.Read ())
-                    {
+                    string idxdef = rdr ["indexdef"].ToString ().ToLower();
+                    string idxstru = idxdef.Substring(0,idxdef.IndexOf("using"));
+                    string idxcols = idxdef.Substring(idxdef.IndexOf("(")+1);
+                    idxcols = idxcols.Remove(idxcols.Length-1);
 
-                        //string indexname = rdr ["indexnamecolumns"].ToString ();
-                        string unq = rdr ["unique"].ToString ();
-                        bool unique = uint.Parse (rdr ["unique"].ToString ()) == 0;
-                        string index = rdr ["columns"].ToString ();
-          //          uint sequence = uint.Parse (rdr ["seq_in_index"].ToString ());
-                        if (!indexLookup.ContainsKey (index))
-                        {
-                            indexLookup [index] = new Dictionary<uint, string> ();
-                        }
-                        indexIsUnique [index] = unique;
-                        //indexLookup [index] [sequence - 1] = name;
+                    string[] indexdef = idxdef.Split(' ');
+                    string[] indexcols = idxcols.Split(',');
+                    string name;
+                    string index;
+                    bool unique;
+
+                    if (indexdef[1] == "unique")                // create unique index <indexname> on <tablename> using btree(<key1>, <key2>,...)
+                    {
+                        name = indexdef[3];
+                        unique = true;
                     }
-                }
+                    else
+                    {
+                        name = indexdef[2];                     // create index <indexname> on <tablename> using btree(<key1>, <key2>,...)
+                        unique = false;
+                    }
+                          
+                    // index type  _pkey: primary, _key: unique, _idx: general index
+                    string[] idxname = name.Split('_');
+                    string indexType = (idxname[idxname.Count() - 1]);
+                    switch (indexType)
+                    {
+                    case "pkey":
+                        index = "PRIMARY";
+                        //unique = true;
+                        break;
+                    case "key":
+//                        index = "UNIQUE";
+                        index = idxname[1];     // idx_keyname_...
+                        //unique = true;
+                        break;
+                    default:
+//                        index = "INDEX";
+                        index = idxname[1];
+                        //unique = false;
+                        break;
+                    }
+
+                    indexIsUnique[index] = unique;   // primary & unique  are 'unique', others are not
+//                    indexIsUnique[index] = (idxname[idxname.Count() - 1] != "key");   // primary & unique  are 'unique', others are not
+
+//                    if (!indexLookup.ContainsKey(index))       // this should be the case... check for multiple index versions though
+//                    {
+                        indexLookup[index] = new Dictionary<uint, string>();    // each record is an index
+//                    }
+                    uint sequence = 0;
+                    foreach(string colname in indexcols)
+                    {
+                        indexLookup[index][sequence] = colname.Trim();
+                        sequence += 1;
+                    }
+
+                 }
+                if (rdr != null)
+                    rdr.Close ();
+                cmd.Connection.Close();
+
             } catch (Exception e)
             {
                 MainConsole.Instance.ErrorFormat ("[PgSQLDataLoader] ExtractIndicesFromTable: {0}", e);
-            } finally
+            } /* finally
             {
                 try
                 {
@@ -1277,17 +1383,16 @@ namespace WhiteCore.DataManager.PgSQL
                 {
                     MainConsole.Instance.DebugFormat ("[PgSQLDataLoader] ExtractIndicesFromTable: {0}", e);
                 }
-            }
+            }*/
 
             foreach (KeyValuePair<string, Dictionary<uint, string>> index in indexLookup)
             {
                 index.Value.OrderBy (x => x.Key);
                 defs [index.Key] = new IndexDefinition {
                     Fields = index.Value.Values.ToArray<string> (),
-                    Type =
-                                              (indexIsUnique [index.Key]
-                                                   ? (index.Key == "PRIMARY" ? IndexType.Primary : IndexType.Unique)
-                                                   : IndexType.Index)
+                    Type = (indexIsUnique [index.Key]
+                        ? (index.Key == "PRIMARY" ? IndexType.Primary : IndexType.Unique)
+                        : IndexType.Index)
                 };
             }
 
