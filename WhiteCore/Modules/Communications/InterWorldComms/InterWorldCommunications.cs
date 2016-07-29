@@ -121,7 +121,7 @@ namespace WhiteCore.Modules.Communications
 
         public string GridName
         {
-            get { return m_config.GetString("gridname", String.Empty); }
+            get { return m_config.GetString("gridname", string.Empty); }
         }
 
         #endregion
@@ -147,7 +147,7 @@ namespace WhiteCore.Modules.Communications
 						           m_config.GetString("UntrustedConnectionsDefaultTrust",
 						                   m_untrustedConnectionsDefaultTrust.ToString()));
 
-				registry.RegisterModuleInterface<InterWorldCommunications>(this);
+				registry.RegisterModuleInterface (this);
 //				Init(registry, Name);
 //				registry.RegisterModuleInterface(this);
                 registry.StackModuleInterface<IWCCommunicationService>(this);
@@ -177,6 +177,7 @@ namespace WhiteCore.Modules.Communications
 				}
 				catch
 				{
+                    MainConsole.Instance.Debug ("[IWC]: error contacting previously connected servers");
 				}
 
 				AddConsoleCommands();
@@ -414,7 +415,6 @@ namespace WhiteCore.Modules.Communications
 		/// <summary>
 		/// Command line interface help.
 		/// </summary>
-		/// <param name="scene">Scene.</param>
 		/// <param name="cmd">Cmd.</param>
 		void InterfaceHelp(string[] cmd)
 		{
@@ -491,8 +491,11 @@ namespace WhiteCore.Modules.Communications
         string CheckIwcURL(string iwcUrl)
         {
             //Be user friendly, add the http:// if needed as well as the final /
-            iwcUrl = (iwcUrl.StartsWith("http://") || iwcUrl.StartsWith("https://")) ? iwcUrl : "http://" + iwcUrl;
-            iwcUrl = iwcUrl.EndsWith("/") ? iwcUrl + "iwcconnection" : iwcUrl + "/iwcconnection";
+            iwcUrl = (iwcUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                      iwcUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                ? iwcUrl 
+                : "http://" + iwcUrl;
+            iwcUrl = iwcUrl.EndsWith ("/", StringComparison.Ordinal) ? iwcUrl + "iwcconnection" : iwcUrl + "/iwcconnection";
 
             return iwcUrl;
         }
@@ -751,7 +754,7 @@ namespace WhiteCore.Modules.Communications
 			response = null;
 			string resp = WebUtils.PostToService(url, map);
 
-			if (string.IsNullOrEmpty (resp) || resp.StartsWith ("<"))
+			if (string.IsNullOrEmpty (resp) || resp.StartsWith ("<", StringComparison.Ordinal))
 				return false;
 			try
 			{

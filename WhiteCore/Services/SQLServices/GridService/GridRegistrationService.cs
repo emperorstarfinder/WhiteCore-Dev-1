@@ -82,7 +82,7 @@ namespace WhiteCore.Services.SQLServices.GridService
                 //Combine all threat level configs for ones that are less than our given threat level as well
                 foreach (ThreatLevel allThreatLevel in Enum.GetValues(typeof(ThreatLevel)))
                 {
-                    string list = config.GetString("Threat_Level_" + allThreatLevel.ToString(), "");
+                    string list = config.GetString("Threat_Level_" + allThreatLevel, "");
                     if (list != "")
                     {
                         string[] functions = list.Split(',');
@@ -280,7 +280,8 @@ namespace WhiteCore.Services.SQLServices.GridService
                             foreach (OSD o in (OSDArray)module.Value)
                             {
                                 //Build the URL
-                                if (o.AsString().StartsWith("http://") || o.AsString().StartsWith("https://"))
+                                if (o.AsString().StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                    o.AsString().StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                                     array.Add(o.AsString());
                                 else
                                     array.Add(((OSDArray)urls.HostNames[module.Key])[i] + ":" +
@@ -293,7 +294,8 @@ namespace WhiteCore.Services.SQLServices.GridService
                         else
                         {
                             //Build the URL
-                            if (module.Value.AsString().StartsWith("http://") || module.Value.AsString().StartsWith("https://"))
+                            if (module.Value.AsString().StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                                module.Value.AsString().StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                                 retVal[module.Key] = module.Value.AsString();
                             else
                                 retVal[module.Key] = urls.HostNames[module.Key] + ":" + urls.Ports[module.Key] + module.Value.AsString();
@@ -313,9 +315,9 @@ namespace WhiteCore.Services.SQLServices.GridService
                 List<string> innerURL;
 
                 m_loadBalancer.GetHost (module.UrlName, module, SessionID, out port, out hostName, out innerURL);
-                ports[module.UrlName] = port.Count == 1 ? (OSD)port[0] : (OSD)port.ToOSDArray();
-                hostnames[module.UrlName] = hostName.Count == 1 ? (OSD)hostName[0] : (OSD)hostName.ToOSDArray();
-                databaseSave[module.UrlName] = innerURL.Count == 1 ? (OSD)innerURL[0] : (OSD)innerURL.ToOSDArray();
+                ports[module.UrlName] = port.Count == 1 ? (OSD)port[0] : port.ToOSDArray();
+                hostnames[module.UrlName] = hostName.Count == 1 ? (OSD)hostName[0] : hostName.ToOSDArray();
+                databaseSave[module.UrlName] = innerURL.Count == 1 ? (OSD)innerURL[0] : innerURL.ToOSDArray();
             }
             foreach (KeyValuePair<string, OSD> module in databaseSave)
             {
@@ -326,7 +328,8 @@ namespace WhiteCore.Services.SQLServices.GridService
                     foreach (OSD o in (OSDArray)module.Value)
                     {
                         //Build the URL
-                        if (o.AsString().StartsWith("http://") || o.AsString().StartsWith("https://"))
+                        if (o.AsString().StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                            o.AsString().StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                             array.Add(o.AsString());
                         else
                             array.Add(((OSDArray)hostnames[module.Key])[i] + ":" +
@@ -339,7 +342,8 @@ namespace WhiteCore.Services.SQLServices.GridService
                 else
                 {
                     //Build the URL
-                    if (module.Value.AsString().StartsWith("http://") || module.Value.AsString().StartsWith("https://"))
+                    if (module.Value.AsString().StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                        module.Value.AsString().StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                         retVal[module.Key] = module.Value.AsString();
                     else
                         retVal[module.Key] = hostnames[module.Key] + ":" + ports[module.Key] + module.Value.AsString();
@@ -409,6 +413,7 @@ namespace WhiteCore.Services.SQLServices.GridService
                     }
                     catch
                     {
+                        MainConsole.Instance.Debug ("[IWC]: Error removing urls for client - " + urls.URLS [module.UrlName]);
                     }
                 }
             }
@@ -502,19 +507,19 @@ namespace WhiteCore.Services.SQLServices.GridService
                 return retVal;
             }
 
-            public override void FromOSD(OSDMap retVal)
+            public override void FromOSD(OSDMap map)
             {
-                URLS = (OSDMap)retVal["URLS"];
-                SessionID = retVal["SessionID"].AsString();
-                Expiration = retVal["Expiration"].AsDate ();
+                URLS = (OSDMap)map ["URLS"];
+                SessionID = map ["SessionID"].AsString();
+                Expiration = map ["Expiration"].AsDate ();
                 Expiration = Expiration.ToUniversalTime ();
-                HostNames = retVal["HostName"] as OSDMap;
-                Ports = retVal["Port"] as OSDMap;
-                if (!retVal.ContainsKey("VersionNumber"))
+                HostNames = map ["HostName"] as OSDMap;
+                Ports = map ["Port"] as OSDMap;
+                if (!map.ContainsKey("VersionNumber"))
                     VersionNumber = 0;
                 else
-                    VersionNumber = retVal["VersionNumber"].AsInteger();
-                _ParentHostName = retVal["_ParentHostName"].AsString();
+                    VersionNumber = map ["VersionNumber"].AsInteger();
+                _ParentHostName = map ["_ParentHostName"].AsString();
             }
         }
 
@@ -560,9 +565,9 @@ namespace WhiteCore.Services.SQLServices.GridService
             {
                 for (int i = 0; i < urls.Length; i++)
                 {
-                    if (urls[i].StartsWith (" "))
+                    if (urls [i].StartsWith (" ", StringComparison.Ordinal))
                         urls[i] = urls[i].Remove(0, 1);
-                    bool isSecure = urls[i].StartsWith("https://");
+                    bool isSecure = urls[i].StartsWith("https://", StringComparison.OrdinalIgnoreCase);
                     urls[i] = urls[i].Replace("http://", "");
                     urls[i] = urls[i].Replace("https://", "");
                     //Readd the http://
@@ -575,10 +580,10 @@ namespace WhiteCore.Services.SQLServices.GridService
             {
                 for (int i = 0; i < urls.Length; i++)
                 {
-                    if (urls[i].StartsWith (" "))
+                    if (urls [i].StartsWith (" ", StringComparison.Ordinal))
                         urls[i] = urls[i].Remove (0, 1);
                     //Remove any ports people may have added
-                    bool isSecure = urls[i].StartsWith("https://");
+                    bool isSecure = urls[i].StartsWith("https://", StringComparison.OrdinalIgnoreCase);
                     urls[i] = urls[i].Replace("http://", "");
                     urls[i] = urls[i].Replace("https://", "");
                     urls[i] = urls[i].Split (':')[0];
@@ -593,7 +598,7 @@ namespace WhiteCore.Services.SQLServices.GridService
                 List<uint> uPorts = new List<uint> ();
                 for (int i = 0; i < ports.Length; i++)
                 {
-                    if (ports[i].StartsWith (" "))
+                    if (ports [i].StartsWith (" ", StringComparison.Ordinal))
                         ports[i] = ports[i].Remove (0, 1);
                     if (ports[i].Contains("-"))
                     {
@@ -619,10 +624,10 @@ namespace WhiteCore.Services.SQLServices.GridService
             /// </summary>
             /// <param name="name"></param>
             /// <param name="SessionID"></param>
-            /// <param name="port"></param>
-            /// <param name="hostName"></param>
+            /// <param name="ports"></param>
+            /// <param name="hostNames"></param>
             /// <param name="module"></param>
-            /// <param name="innerUrl"></param>
+            /// <param name="innerUrls"></param>
             /// <returns>Whether we need to create a handler or whether it is an external URL</returns>
             public void GetHost (string name, IGridRegistrationUrlModule module, string SessionID, out List<uint> ports, out List<string> hostNames, out List<string> innerUrls)
             {
@@ -790,26 +795,26 @@ namespace WhiteCore.Services.SQLServices.GridService
                 }
 
 
-				public override byte[] Handle (string path, Stream requestData,
+				public override byte[] Handle (string path, Stream request,
                         OSHttpRequest httpRequest, OSHttpResponse httpResponse)
                 {
-                    StreamReader sr = new StreamReader (requestData);
+                    StreamReader sr = new StreamReader (request);
                     string body = sr.ReadToEnd ();
                     sr.Close ();
                     body = body.Trim ();
-					OSDMap request = WebUtils.GetOSDMap (body, false);							// no logmessages
-                    if(request["Password"] != m_password)
+                    OSDMap requestmap = WebUtils.GetOSDMap (body, false);							// no logmessages
+                    if(requestmap["Password"] != m_password)
                         return null;
                     OSDMap response = new OSDMap ();
 
                     switch (response["Method"].AsString())
                     {
                         case "GetExternalCounts":
-                            response["Count"] = m_service.m_loadBalancer.m_urls[request["Param"]].Count;
+                            response["Count"] = m_service.m_loadBalancer.m_urls[requestmap["Param"]].Count;
                             break;
                         case "GetExternalInfo":
-                            string moduleName = request["Param"];
-                            string SessionID = request["Param2"];
+                            string moduleName = requestmap["Param"];
+                            string SessionID = requestmap["Param2"];
                             if (m_service.m_modules.ContainsKey (moduleName))
                             {
                                 List<uint> port;
