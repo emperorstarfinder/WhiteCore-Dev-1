@@ -1,7 +1,8 @@
 #!/bin/bash
 # Run prebuild to configure and create the appropriate Solution and Project files for building WhiteCore-Sim
+#  Default is to prompt for configuration
 #
-# November 2015
+# May 2016
 # Rowan Deppeler <greythane@gmail.com>
 
 # find and change to the current folder (bash does not start here by default)
@@ -105,7 +106,7 @@ fi
 # Build WhiteCore-Sim
 if ${BUILD:=true} ; then
   echo Building WhiteCore-Sim
-  xbuild /property:Configuration="$CONFIG" /property:Platform="$ARCH"
+  xbuild  WhiteCore.sln /property:Configuration="$CONFIG" /property:Platform="$ARCH"
   echo Finished Building WhiteCore
   echo Thank you for choosing WhiteCore-Sim
   echo Please report any errors to our Github Issue Tracker https://github.com/WhiteCoreSim/WhiteCore-Dev/issues

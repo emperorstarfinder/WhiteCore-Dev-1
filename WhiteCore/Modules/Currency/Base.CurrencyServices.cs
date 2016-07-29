@@ -259,17 +259,6 @@ namespace WhiteCore.Modules.Currency
             return result;
         }
 
-        public List<GroupAccountHistory> GetTransactions(UUID groupID, UUID agentID, int currentInterval,
-                                                         int intervalDays)
-        {
-            return new List<GroupAccountHistory>();
-        }
-
-        public GroupBalance GetGroupBalance(UUID groupID)
-        {
-            return m_connector.GetGroupBalance(groupID);
-        }
-
         public uint NumberOfTransactions(UUID toAgent, UUID fromAgent)
         {
             return m_connector.NumberOfTransactions(toAgent, fromAgent);
@@ -325,6 +314,25 @@ namespace WhiteCore.Modules.Currency
         {
             return m_connector.GetPurchaseHistory(period, periodType, start, count);
         }
+
+        public List<GroupAccountHistory> GetGroupTransactions(UUID groupID, UUID agentID, int currentInterval,
+            int intervalDays)
+        {
+            return m_connector.GetGroupTransactions (groupID, agentID, currentInterval, intervalDays);
+        }
+
+        public GroupBalance GetGroupBalance(UUID groupID)
+        {
+            return m_connector.GetGroupBalance(groupID);
+        }
+
+        public bool GroupCurrencyTransfer(UUID groupID, UUID userID, bool payUser, string toObjectName, UUID fromObjectID,
+            string fromObjectName, int amount, string description, TransactionType type, UUID transactionID)
+        {
+            return m_connector.GroupCurrencyTransfer(groupID, userID, payUser, toObjectName, fromObjectID,
+                fromObjectName, amount, description, type, transactionID);
+        }
+
 
         #endregion
 
@@ -460,7 +468,7 @@ namespace WhiteCore.Modules.Currency
                         if (lo != null) {   
                             if ((lo.LandData.Flags & (uint)ParcelFlags.ForSale) == (uint)ParcelFlags.ForSale) {
                                 if (lo.LandData.AuthBuyerID != UUID.Zero && lo.LandData.AuthBuyerID != agentID)
-                                    return new OSDMap () { new KeyValuePair<string, OSD> ("Success", false) };
+                                    return new OSDMap { new KeyValuePair<string, OSD> ("Success", false) };
                                 OSDMap map = lo.LandData.ToOSD ();
                                 map ["Success"] = true;
                                 return map;
@@ -468,7 +476,7 @@ namespace WhiteCore.Modules.Currency
                         }
                     }
                 }
-                return new OSDMap() {new KeyValuePair<string, OSD>("Success", false)};
+                return new OSDMap {new KeyValuePair<string, OSD>("Success", false)};
             }
             return null;
         }
@@ -582,7 +590,7 @@ namespace WhiteCore.Modules.Currency
 
             if (amount == 0) {
                 string response = MainConsole.Instance.Prompt ("Clear user's balance? (yes, no)", "no").ToLower ();
-                if (!response.StartsWith ("y")) {
+                if (!response.StartsWith ("y", StringComparison.Ordinal)) {
                     MainConsole.Instance.Info ("[Currency]: User balance not cleared.");
                     return;
                 }
@@ -644,12 +652,12 @@ namespace WhiteCore.Modules.Currency
 
             string transInfo;
 
-            transInfo =  String.Format ("{0, -24}", "Date");
-            transInfo += String.Format ("{0, -25}", "From");
-            transInfo += String.Format ("{0, -30}", "Description");
-            transInfo += String.Format ("{0, -20}", "Type");
-            transInfo += String.Format ("{0, -12}", "Amount");
-            transInfo += String.Format ("{0, -12}", "Balance");
+            transInfo =  string.Format ("{0, -24}", "Date");
+            transInfo += string.Format ("{0, -25}", "From");
+            transInfo += string.Format ("{0, -30}", "Description");
+            transInfo += string.Format ("{0, -20}", "Type");
+            transInfo += string.Format ("{0, -12}", "Amount");
+            transInfo += string.Format ("{0, -12}", "Balance");
 
             MainConsole.Instance.CleanInfo(transInfo);
 
@@ -657,17 +665,17 @@ namespace WhiteCore.Modules.Currency
                 "-------------------------------------------------------------------------------------------------------------------------");
 
             List<AgentTransfer> transactions =  GetTransactionHistory(account.PrincipalID, period, "day");
+            if (transactions != null) {
+                foreach (AgentTransfer transfer in transactions) {
+                    transInfo = string.Format ("{0, -24}", transfer.TransferDate.ToLocalTime ());
+                    transInfo += string.Format ("{0, -25}", transfer.FromAgentName);
+                    transInfo += string.Format ("{0, -30}", transfer.Description);
+                    transInfo += string.Format ("{0, -20}", Utilities.TransactionTypeInfo (transfer.TransferType));
+                    transInfo += string.Format ("{0, -12}", transfer.Amount);
+                    transInfo += string.Format ("{0, -12}", transfer.ToBalance);
 
-            foreach (AgentTransfer transfer in transactions) {
-                transInfo = String.Format ("{0, -24}", transfer.TransferDate.ToLocalTime ());   
-                transInfo += String.Format ("{0, -25}", transfer.FromAgentName);   
-                transInfo += String.Format ("{0, -30}", transfer.Description);
-                transInfo += String.Format ("{0, -20}", Utilities.TransactionTypeInfo(transfer.TransferType));
-                transInfo += String.Format ("{0, -12}", transfer.Amount);
-                transInfo += String.Format ("{0, -12}", transfer.ToBalance);
-
-                MainConsole.Instance.CleanInfo(transInfo);
-
+                    MainConsole.Instance.CleanInfo (transInfo);
+                }
             }
 
         }
@@ -684,10 +692,10 @@ namespace WhiteCore.Modules.Currency
             
             string transInfo;
 
-            transInfo = String.Format ("{0, -24}", "Date");
-            transInfo += String.Format ("{0, -30}", "Description");
-            transInfo += String.Format ("{0, -20}", "InWorld Amount");
-            transInfo += String.Format ("{0, -12}", "Cost");
+            transInfo = string.Format ("{0, -24}", "Date");
+            transInfo += string.Format ("{0, -30}", "Description");
+            transInfo += string.Format ("{0, -20}", "InWorld Amount");
+            transInfo += string.Format ("{0, -12}", "Cost");
 
             MainConsole.Instance.CleanInfo (transInfo);
 
@@ -695,15 +703,15 @@ namespace WhiteCore.Modules.Currency
                 "--------------------------------------------------------------------------------------------");
 
             List<AgentPurchase> purchases = GetPurchaseHistory (account.PrincipalID, period, "day");
+            if (purchases != null) {
+                foreach (AgentPurchase purchase in purchases) {
+                    transInfo = string.Format ("{0, -24}", purchase.PurchaseDate.ToLocalTime ());
+                    transInfo += string.Format ("{0, -30}", "Purchase");
+                    transInfo += string.Format ("{0, -20}", m_connector.InWorldCurrency + purchase.Amount);
+                    transInfo += string.Format ("{0, -12}", m_connector.RealCurrency + ((float)purchase.RealAmount / 100).ToString ("0.00"));
 
-            foreach (AgentPurchase purchase in purchases) {
-                transInfo = String.Format ("{0, -24}", purchase.PurchaseDate.ToLocalTime ());   
-                transInfo += String.Format ("{0, -30}", "Purchase");
-                transInfo += String.Format ("{0, -20}", m_connector.InWorldCurrency + purchase.Amount);
-                transInfo += String.Format ("{0, -12}", m_connector.RealCurrency + ((float)purchase.RealAmount / 100).ToString ("0.00"));
-
-                MainConsole.Instance.CleanInfo (transInfo);
-
+                    MainConsole.Instance.CleanInfo (transInfo);
+                }
             }
         }
         #endregion
