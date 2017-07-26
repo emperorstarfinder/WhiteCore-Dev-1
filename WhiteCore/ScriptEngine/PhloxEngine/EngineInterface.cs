@@ -48,6 +48,9 @@ using System.Threading;
 using OpenSim.Region.Framework;
 using OpenSim.Region.CoreModules.Capabilities;
 using WhiteCore.Framework.ConsoleFramework;
+using WhiteCore.Framework.Modules;
+using WhiteCore.Framework.SceneInfo;
+using WhiteCore.Framework.PresenceInfo;
 
 namespace WhiteCore.Phlox.Engine
 {
@@ -62,9 +65,9 @@ namespace WhiteCore.Phlox.Engine
         /// </summary>
         private const int STATE_REQUEST_TIMEOUT = 10 * 1000;
 
-        private static readonly var _log = MainConsole.Instance;
+         var _log = MainConsole.Instance;
 
-        Scene _scene;
+        IScene _scene;
         ScriptLoader _scriptLoader;
         ExecutionScheduler _exeScheduler;
         MasterScheduler _masterScheduler;
@@ -144,7 +147,7 @@ namespace WhiteCore.Phlox.Engine
             _masterScheduler.WorkArrived();
         }
 
-        public void AddRegion(Scene scene)
+        public void AddRegion(IScene scene)
         {
             if (ConfigSource.Configs[ScriptEngineName] == null)
                 ConfigSource.AddConfig(ScriptEngineName);
@@ -341,7 +344,7 @@ namespace WhiteCore.Phlox.Engine
             _exeScheduler.ChangeEnabledStatus(itemID, EnableDisableFlag.GeneralEnable);
         }
 
-        void EventManager_OnGetScriptRunning(OpenSim.Framework.IClientAPI controllingClient, 
+        void EventManager_OnGetScriptRunning(IClientAPI controllingClient, 
             OpenMetaverse.UUID objectID, OpenMetaverse.UUID itemID)
         {
             _exeScheduler.PostScriptInfoRequest(new ScriptInfoRequest(itemID, ScriptInfoRequest.Type.ScriptRunningRequest,
@@ -489,7 +492,7 @@ namespace WhiteCore.Phlox.Engine
         {
             return new VM.DetectVariables
             {
-                Grab = new Vector3(),
+                Grab = parm.OffsetPos,
                 Key = parm.Key.ToString(),
                 BotID = parm.BotID.ToString(),
                 Group = parm.Group.ToString(),

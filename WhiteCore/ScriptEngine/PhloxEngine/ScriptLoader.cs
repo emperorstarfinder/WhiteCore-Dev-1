@@ -52,7 +52,7 @@ namespace WhiteCore.Phlox.Engine
     /// </summary>
     internal class ScriptLoader
     {
-        private static readonly var _log = MainConsole.Instance;
+        var _log = MainConsole.Instance;
 
         
         private IAssetCache _assetCache;
